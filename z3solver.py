@@ -2,7 +2,7 @@ import sys
 from z3 import *
 
 # Distinct tactic following Z3py basics, SMT/SAT describes a one-hot approach for latin squares
-def add_constraint_uniquecells(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
+def _add_constraint_uniquecells(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
     for i in range(n):
         for j in range(n):
             for k in range(j+1, n):
@@ -18,7 +18,7 @@ def add_constraint_uniquecells(s: Solver, colored: list[list[BoolRef]], grid: li
 
 # Trivial, remove i-1 and j-1, since we already check those in earlier cells
 # Van der Knijff uses a slightly different approach where two cells cannot be both white if they have equal numbers
-def add_constraint_neighbours(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+def _add_constraint_neighbours(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
     for i in range(n):
         for j in range(n):
             if i+1 < n:
@@ -28,7 +28,7 @@ def add_constraint_neighbours(s: Solver, colored: list[list[BoolRef]], n: int) -
                 # Vertical neighbours
                 s.add(Not(And(colored[i][j], colored[i][j+1])))
 
-def add_constraint_connectedwhite_QFIA(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+def _add_constraint_connectedwhite_QFIA(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
     root_row = Int("root_r")
     root_col = Int("root_c")
     s.add(0 <= root_row, root_row < n, 0 <= root_col, root_col < n)
@@ -62,7 +62,7 @@ def add_constraint_connectedwhite_QFIA(s: Solver, colored: list[list[BoolRef]], 
                         Or(*conditions)
                     ))
                 
-def add_constraint_connectedwhite_QFBV(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+def _add_constraint_connectedwhite_QFBV(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
     max_num = n*n+1
     k = max_num.bit_length()
 
@@ -109,6 +109,22 @@ def add_constraint_connectedwhite_QFBV(s: Solver, colored: list[list[BoolRef]], 
                         Or(*conditions)
                     ))
 
+def _add_constraint_whiteneighbours(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+    for i in range(n):
+        for j in range(n):
+            neighbours = []
+            if i > 0:
+                neighbours.append(Not(colored[i-1][j]))
+            if j > 0:
+                neighbours.append(Not(colored[i][j-1]))
+            if i+1 < n:
+                neighbours.append(Not(colored[i+1][j]))
+            if j+1 < n:
+                neighbours.append(Not(colored[i][j+1]))
+            
+            if neighbours:
+                s.add(Implies(Not(colored[i][j]), Or(*neighbours)))
+
 def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRef]]) -> None:
     if s.check() != sat:
         sys.exit(f"Error: Could not find a satisfiable answer to the puzzle")
@@ -144,17 +160,26 @@ def solve_qf_ia(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    add_constraint_uniquecells(s, colored, puzzle, n)
-    add_constraint_neighbours(s, colored, n)
-    add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
 def solve_qf_bv(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    add_constraint_uniquecells(s, colored, puzzle, n)
-    add_constraint_neighbours(s, colored, n)
-    add_constraint_connectedwhite_QFBV(s, colored, n)
+    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFBV(s, colored, n)
     return _solve(s, n, puzzle, colored)
         
+def solve_qf_ia_redundant1(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_whiteneighbours(s, colored, n)
+    return _solve(s, n, puzzle, colored)
