@@ -119,7 +119,7 @@ def gh_pattern_6(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]],
             
             if grid[j][i] == grid[j+1][i]:
                 for k in range(n):
-                    if k not in (i, i+1) and grid[k][i] == grid[j][i]:
+                    if k not in (j, j+1) and grid[k][i] == grid[j][i]:
                         s.add(colored[k][i])
 
 # Implementation of pattern 7 according to chapter 3.3 of Hitori Solver
@@ -138,16 +138,16 @@ def gh_pattern_7(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]],
                 condition = And(*conditions) if len(conditions) > 1 else conditions[0]
 
                 for k in range(n):
-                    if k not in (j, j+1) and grid[i][k] == grid[i][j]:
+                    if k not in (j, j+2) and grid[i][k] == grid[i][j]:
                         s.add(Implies(condition, colored[i][k]))
 
     for j in range(n):
         for i in range(n-2):
             if grid[i][j] == grid[i+2][j]:
                 conditions = []
-                if i > 0:
+                if j > 0:
                     conditions.append(colored[i+1][j-1])
-                if i < n-1:
+                if j < n-1:
                     conditions.append(colored[i+1][j+1])
                 
                 if not conditions:
@@ -155,7 +155,7 @@ def gh_pattern_7(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]],
                 condition = And(*conditions) if len(conditions) > 1 else conditions[0]
 
                 for k in range(n):
-                    if k not in (i, i+1) and grid[k][j] == grid[i][j]:
+                    if k not in (i, i+2) and grid[k][j] == grid[i][j]:
                         s.add(Implies(condition, colored[k][j]))
 
 # Implementation of pattern 8 according to chapter 3.3 of Hitori Solver
