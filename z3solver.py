@@ -4,7 +4,7 @@ import z3solver_patterns
 from z3 import *
 
 # Distinct tactic following Z3py basics, SMT/SAT describes a one-hot approach for latin squares
-def _add_constraint_uniquecells(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
+def _add_constraint_uniquecells_pairs(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
     for i in range(n):
         for j in range(n):
             for k in range(j+1, n):
@@ -19,7 +19,7 @@ def _add_constraint_uniquecells(s: Solver, colored: list[list[BoolRef]], grid: l
                     s.add(Or(colored[j][i], colored[k][i]))
 
 # Alternate implemention of the uniquecells constraint by counting the values and asserting at most 1 value per column and row
-def _add_constraint_uniquecells2(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
+def _add_constraint_uniquecells_atmost(s: Solver, colored: list[list[BoolRef]], grid: list[list[int]], n: int) -> None:
     for i in range(n):
         row_values = {}
         col_values = {}
@@ -61,34 +61,32 @@ def _add_constraint_neighbours(s: Solver, colored: list[list[BoolRef]], n: int) 
                 # Vertical neighbours
                 s.add(Not(And(colored[i][j], colored[i][j+1])))
 
-def _add_constraint_connectedwhite_QFIA(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+def _add_constraint_connectedwhite_QFIA_ranking(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
     root_row = Int("root_r")
     root_col = Int("root_c")
     s.add(root_row == 0)
     s.add(Or(root_col == 0, root_col == 1))
     s.add(Or(And(root_col == 0, Not(colored[0][0])), And(root_col == 1, Not(colored[0][1]))))
 
-    Number = [[Int(f"num_{r}_{c}") for c in range(n)] for r in range(n)]
+    rank = [[Int(f"num_{r}_{c}") for c in range(n)] for r in range(n)]
 
     for i in range(n):
         for j in range(n):
-            s.add(If(Not(colored[i][j]),
-                     If(And(i == root_row, j == root_col),
-                        Number[i][j] == 0,
-                        Number[i][j] > 0),
-                    Number[i][j] == -1))
+            s.add(Implies(colored[i][j], rank[i][j] == -1))
+            s.add(Implies(And(Not(colored[i][j]), i == root_row, j == root_col), rank[i][j] == 0))
+            s.add(Implies(And(Not(colored[i][j]), Not(And(i == root_row, j == root_col))), rank[i][j] > 0))
             
     for i in range(n):
         for j in range(n):
             conditions = []
             if i > 0:
-                conditions.append(And(Not(colored[i-1][j]), Number[i-1][j] < Number[i][j]))
+                conditions.append(And(Not(colored[i-1][j]), rank[i-1][j] < rank[i][j]))
             if j > 0:
-                conditions.append(And(Not(colored[i][j-1]), Number[i][j-1] < Number[i][j]))
+                conditions.append(And(Not(colored[i][j-1]), rank[i][j-1] < rank[i][j]))
             if i+1 < n:
-                conditions.append(And(Not(colored[i+1][j]), Number[i+1][j] < Number[i][j]))
+                conditions.append(And(Not(colored[i+1][j]), rank[i+1][j] < rank[i][j]))
             if j+1 < n:
-                conditions.append(And(Not(colored[i][j+1]), Number[i][j+1] < Number[i][j]))
+                conditions.append(And(Not(colored[i][j+1]), rank[i][j+1] < rank[i][j]))
 
             if conditions:
                 s.add(Implies(
@@ -96,7 +94,76 @@ def _add_constraint_connectedwhite_QFIA(s: Solver, colored: list[list[BoolRef]],
                         Or(*conditions)
                     ))
                 
-def _add_constraint_connectedwhite_QFBV(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+def _add_constraint_connectedwhite_QFIA_ranking_improved(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+    max_rank = n*n-1
+    rank = [[Int(f"rank_{i}_{j}") for j in range(n)] for i in range(n)]
+    root = [[Bool(f"root_{i}_{j}") for j in range(n)] for i in range(n)]
+
+    root_flat = [root[i][j] for i in range(n) for j in range(n)]
+    s.add(PbEq([(r, 1) for r in root_flat], 1))
+
+    for i in range(n):
+        for j in range(n):
+            s.add(Implies(colored[i][j], And(rank[i][j] == -1, Not(root[i][j]))))
+            s.add(Implies(root[i][j], And(Not(colored[i][j]), rank[i][j] == 0)))
+            s.add(Implies(And(Not(colored[i][j]), Not(root[i][j])), And(rank[i][j] > 0, rank[i][j] <= max_rank)))
+            
+    for i in range(n):
+        for j in range(n):
+            conditions = []
+            if i > 0:
+                conditions.append(And(Not(colored[i-1][j]), rank[i-1][j] < rank[i][j]))
+            if j > 0:
+                conditions.append(And(Not(colored[i][j-1]), rank[i][j-1] < rank[i][j]))
+            if i+1 < n:
+                conditions.append(And(Not(colored[i+1][j]), rank[i+1][j] < rank[i][j]))
+            if j+1 < n:
+                conditions.append(And(Not(colored[i][j+1]), rank[i][j+1] < rank[i][j]))
+
+            if conditions:
+                s.add(Implies(
+                        And(Not(colored[i][j]), Not(root[i][j])),
+                        Or(*conditions)
+                    ))
+                
+def _add_constraint_connectedwhite_QFIA_tree(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
+    max_rank = n*n-1
+    depth = [[Int(f"rank_{i}_{j}") for j in range(n)] for i in range(n)]
+    root = [[Bool(f"root_{i}_{j}") for j in range(n)] for i in range(n)]
+
+    parent_up = [[Bool(f"Up_{i}_{j}") for j in range(n)] for i in range(n)]
+    parent_down = [[Bool(f"Down_{i}_{j}") for j in range(n)] for i in range(n)]
+    parent_left = [[Bool(f"Left_{i}_{j}") for j in range(n)] for i in range(n)]
+    parent_right = [[Bool(f"Right_{i}_{j}") for j in range(n)] for i in range(n)]
+
+    root_flat = [root[i][j] for i in range(n) for j in range(n)]
+    s.add(PbEq([(r, 1) for r in root_flat], 1))
+
+    for i in range(n):
+        for j in range(n):
+            parents = [parent_up[i][j], parent_down[i][j], parent_left[i][j], parent_right[i][j]]
+            s.add(Implies(colored[i][j], And(depth[i][j] == -1, Not(root[i][j]), *[Not(p) for p in parents])))
+            s.add(Implies(root[i][j], And(Not(colored[i][j]), depth[i][j] == 0, *[Not(p) for p in parents])))
+            s.add(Implies(And(Not(colored[i][j]), Not(root[i][j])), And(depth[i][j] > 0, depth[i][j] <= max_rank, PbEq([(parents[k], 1) for k in range(4)], 1))))
+            
+            if i > 0:
+                s.add(Implies(parent_up[i][j], And(Not(colored[i][j]), depth[i-1][j] < depth[i][j])))
+            else:
+                s.add(Not(parent_up[i][j]))
+            if j > 0:
+                s.add(Implies(parent_left[i][j], And(Not(colored[i][j-1]), depth[i][j-1] < depth[i][j])))
+            else:
+                s.add(Not(parent_left[i][j]))
+            if i+1 < n:
+                s.add(Implies(parent_down[i][j], And(Not(colored[i+1][j]), depth[i+1][j] < depth[i][j])))
+            else:
+                s.add(Not(parent_down[i][j]))
+            if j+1 < n:
+                s.add(Implies(parent_right[i][j], And(Not(colored[i][j+1]), depth[i][j+1] < depth[i][j])))
+            else:
+                s.add(Not(parent_right[i][j]))
+                
+def _add_constraint_connectedwhite_QFBV_ranking(s: Solver, colored: list[list[BoolRef]], n: int) -> None:
     max_num = n*n+1
     k = max_num.bit_length()
 
@@ -181,37 +248,54 @@ def solve_qf_ia(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_qf_ia_unique_improved(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_atmost(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_qf_ia_connect_improved(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking_improved(s, colored, n)
+    return _solve(s, n, puzzle, colored)
+
+def solve_qf_ia_connect_tree(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
+    n = len(puzzle)
+    s = Solver()
+    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
+    _add_constraint_neighbours(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_tree(s, colored, n)
     return _solve(s, n, puzzle, colored)
 
 def solve_qf_bv(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFBV(s, colored, n)
+    _add_constraint_connectedwhite_QFBV_ranking(s, colored, n)
     return _solve(s, n, puzzle, colored)
-
-def solve_qf_ia_redundant_unique_values(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
-    n = len(puzzle)
-    s = Solver()
-    colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells2(s, colored, puzzle, n)
-    _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
-    return _solve(s, n, puzzle, colored)
-
 
 def solve_qf_ia_p1(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     z3solver_patterns.gh_pattern_1(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
@@ -220,9 +304,9 @@ def solve_qf_ia_p2(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     z3solver_patterns.gh_pattern_2(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
@@ -231,9 +315,9 @@ def solve_qf_ia_p3(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     z3solver_patterns.gh_pattern_3(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
@@ -242,9 +326,9 @@ def solve_qf_ia_p4(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     z3solver_patterns.gh_pattern_4(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
@@ -253,9 +337,9 @@ def solve_qf_ia_p5(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     z3solver_patterns.gh_pattern_5(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
@@ -264,9 +348,9 @@ def solve_qf_ia_p6(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     z3solver_patterns.gh_pattern_6(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
@@ -275,9 +359,9 @@ def solve_qf_ia_p7(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     z3solver_patterns.gh_pattern_7(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
 
@@ -286,8 +370,8 @@ def solve_qf_ia_p8(puzzle: list[list[int]]) -> tuple[list[list[str]], dict]:
     n = len(puzzle)
     s = Solver()
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    _add_constraint_uniquecells(s, colored, puzzle, n)
+    _add_constraint_uniquecells_pairs(s, colored, puzzle, n)
     _add_constraint_neighbours(s, colored, n)
-    _add_constraint_connectedwhite_QFIA(s, colored, n)
+    _add_constraint_connectedwhite_QFIA_ranking(s, colored, n)
     z3solver_patterns.gh_pattern_8(s, colored, puzzle, n)
     return _solve(s, n, puzzle, colored)
