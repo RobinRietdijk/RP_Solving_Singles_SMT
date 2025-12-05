@@ -104,44 +104,47 @@ def _add_constraint_connectedwhite_QFBV(s: Solver, colored: list[list[BoolRef]],
     root_col = BitVec("root_c", k)
     zero_bv = BitVecVal(0, k)
     n_bv = BitVecVal(n, k)
-    s.add(ULE(zero_bv, root_row), ULT(root_row, n_bv))
-    s.add(ULE(zero_bv, root_col), ULT(root_col, n_bv))
+    max_bv = BitVecVal(max_num, k)
+    max_valid = BitVecVal(max_num-1, k)
+
+    is_white = [[Bool(f"white_{i}_{j}") for j in range(n)] for i in range(n)]
+    is_root = [[Bool(f"root_{i}_{j}") for j in range(n)] for i in range(n)]
+
+    s.add(ULT(root_row, n_bv))
+    s.add(ULT(root_col, n_bv))
 
     Number = [[BitVec(f"num_{r}_{c}", k) for c in range(n)] for r in range(n)]
 
+    row_bvs = [BitVecVal(i, k) for i in range(n)]
+    col_bvs = [BitVecVal(i, k) for i in range(n)]
     for i in range(n):
         for j in range(n):
-            i_bv = BitVecVal(i, k)
-            j_bv = BitVecVal(j, k)
+            i_bv = row_bvs[i]
+            j_bv = col_bvs[j]
 
-            s.add(Or(Number[i][j] == BitVecVal(n*n+1, k), ULE(Number[i][j], BitVecVal(n*n, k))))
-            s.add(Implies(And(root_row == i_bv, root_col == j_bv), Not(colored[i][j])))
-            s.add(If(Not(colored[i][j]),
-                     If(And(i_bv == root_row, j_bv == root_col),
-                        Number[i][j] == zero_bv,
-                        UGT(Number[i][j], zero_bv)),
-                    Number[i][j] == BitVecVal(n*n+1, k)))
+            s.add(is_white[i][j] == Not(colored[i][j]))
+            s.add(is_root[i][j] == And(root_row == i_bv, root_col == j_bv))
+
+            s.add(Implies(Not(is_white[i][j]), Number[i][j] == max_bv))
+            s.add(Implies(is_white[i][j], ULE(Number[i][j], max_valid)))
+
+            s.add(Implies(And(is_white[i][j], is_root[i][j]), Number[i][j] == zero_bv))
+            s.add(Implies(And(is_white[i][j], Not(is_root[i][j])), UGT(Number[i][j], zero_bv)))
             
     for i in range(n):
         for j in range(n):
-            i_bv = BitVecVal(i, k)
-            j_bv = BitVecVal(j, k)
-
             conditions = []
             if i > 0:
-                conditions.append(And(Not(colored[i-1][j]), ULT(Number[i-1][j], Number[i][j])))
+                conditions.append(And(is_white[i-1][j], ULT(Number[i-1][j], Number[i][j])))
             if j > 0:
-                conditions.append(And(Not(colored[i][j-1]), ULT(Number[i][j-1], Number[i][j])))
+                conditions.append(And(is_white[i][j-1], ULT(Number[i][j-1], Number[i][j])))
             if i+1 < n:
-                conditions.append(And(Not(colored[i+1][j]), ULT(Number[i+1][j], Number[i][j])))
+                conditions.append(And(is_white[i+1][j], ULT(Number[i+1][j], Number[i][j])))
             if j+1 < n:
-                conditions.append(And(Not(colored[i][j+1]), ULT(Number[i][j+1], Number[i][j])))
+                conditions.append(And(is_white[i][j+1], ULT(Number[i][j+1], Number[i][j])))
 
             if conditions:
-                s.add(Implies(
-                        And(Not(colored[i][j]), Not(And(root_row == i_bv, root_col == j_bv))),
-                        Or(*conditions)
-                    ))
+                s.add(Implies(And(is_white[i][j], Not(is_root[i][j])), Or(*conditions)))
 
 def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRef]]) -> None:
     if s.check() != sat:
