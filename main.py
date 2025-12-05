@@ -11,6 +11,9 @@ PUZZLES_FOLDER = os.path.abspath("puzzles")
 SOLUTIONS_FOLDER = os.path.abspath("solutions")
 SOLVERS = {
     "baseline": z3solver.solve_qf_ia,
+    "alternate_uniqueness": z3solver.solve_qf_ia_unique_improved,
+    "alternate_connectivity": z3solver.solve_qf_ia_connect_improved,
+    "tree_connectivity": z3solver.solve_qf_ia_connect_tree,
     "bitvector": z3solver.solve_qf_bv,
     "pattern_1": z3solver.solve_qf_ia_p1,
     "pattern_2": z3solver.solve_qf_ia_p2,
