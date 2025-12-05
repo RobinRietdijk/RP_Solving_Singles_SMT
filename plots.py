@@ -4,6 +4,45 @@ import scienceplots
 
 plt.style.use(['science','ieee'])
 
+plt.rcParams.update({
+    "lines.linewidth": 0.8,
+    "lines.markersize": 1,
+    "legend.fontsize": 6,
+    "legend.title_fontsize": 5,
+    "axes.labelsize": 8,
+    "xtick.labelsize": 7,
+    "ytick.labelsize": 7,
+    "figure.dpi": 300,
+    "savefig.dpi": 300,
+    "xtick.minor.visible": False,
+    "axes.grid.which": "major",
+    "xtick.major.size": 2.5,
+    "ytick.major.size": 2.5,
+    "ytick.minor.size": 1.5,
+    "xtick.major.width": 0.6,
+    "ytick.major.width": 0.6,
+    "ytick.minor.width": 0.5,
+    "xtick.top": False,
+    "ytick.right": False,
+    "xtick.bottom": True,
+    "ytick.left": True,
+    "axes.grid": True,
+    "axes.grid.which": "major",
+    "grid.color": "0.85",
+    "grid.alpha": 0.6,
+    "grid.linewidth": 0.6,
+    "grid.linestyle": "-", 
+})
+
+plt.rcParams["axes.prop_cycle"] = plt.cycler(color=[
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+    "#a6cee3", "#fb9a99", "#fdbf6f", "#b2df8a", "#cab2d6",
+    "#ffff99", "#33a02c", "#b15928", "#e31a1c", "#1f78b4"
+])
+
+LINE_STYLES = ["-", "--", "-.", ":"]
+
 def _plot_puzzleruntime(results):
     by_size = {}
     for r in results:
@@ -37,8 +76,9 @@ def _plot_puzzleruntime(results):
 
             ys = [puzzle_map.get(p, float("nan")) for p in puzzles]
             z = 10 + (len(solver_order)-index)
-            plt.plot(x, ys, marker="o", label=solver, zorder=z)
-        
+            plt.plot(x, ys, marker=".", linestyle=LINE_STYLES[index % len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
+
+        plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
         plt.xticks(x)
         plt.xlabel("Puzzle index")
         plt.ylabel("Runtime (s)")
@@ -85,8 +125,9 @@ def _plot_puzzlestatistic(results, statistic, y_label):
 
             ys = [puzzle_map.get(p, float("nan")) for p in puzzles]
             z = 10 + (len(solver_order)-index)
-            plt.plot(x, ys, marker="o", label=solver, zorder=z)
+            plt.plot(x, ys, marker="." , linestyle=LINE_STYLES[index % len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
         
+        plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
         plt.xticks(x)
         plt.xlabel("Puzzle index")
         plt.ylabel(y_label)
@@ -143,6 +184,7 @@ def _plot_avgruntime(results):
         plt.figure()
         x = list(range(len(solver_labels)))
         plt.bar(x, avg_per_solver)
+        plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
         plt.xticks(x, solver_labels, rotation=45, ha='right')
         plt.xlabel("Solver")
         plt.ylabel("Average runtime (s)")
@@ -185,6 +227,7 @@ def _plot_avgstatistic(results, statistic, y_label):
         plt.figure()
         x = list(range(len(solver_labels)))
         plt.bar(x, avg_per_solver)
+        plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
         plt.xticks(x, solver_labels, rotation=45, ha='right')
         plt.xlabel("Solver")
         plt.ylabel(y_label)
@@ -236,8 +279,9 @@ def _plot_scalingavgruntime(results):
                 x_sizes.append(size)
                 y_avgs.append(avg)
         if x_sizes:
-            plt.plot(x_sizes, y_avgs, marker="o", label=solver, zorder=z)
+            plt.plot(x_sizes, y_avgs, marker=".", linestyle=LINE_STYLES[index % len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
 
+    plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
     plt.xlabel("Puzzle size n (n x n)")
     plt.ylabel("Average runtime (s)")
     plt.title("Average runtime by puzzle size")
@@ -276,8 +320,9 @@ def _plot_scalingavgstatistic(results, statistic, y_label, plot_name):
                 x_sizes.append(size)
                 y_avgs.append(avg)
         if x_sizes:
-            plt.plot(x_sizes, y_avgs, marker="o", label=solver, zorder=z)
+            plt.plot(x_sizes, y_avgs, marker=".", linestyle=LINE_STYLES[index % len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
 
+    plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
     plt.xlabel("Puzzle size n (n x n)")
     plt.ylabel(y_label)
     plt.title(plot_name)
