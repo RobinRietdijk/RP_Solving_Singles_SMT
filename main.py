@@ -4,6 +4,8 @@ import os
 import z3solver
 from datetime import datetime
 from file_utils import read_puzzle, read_puzzle_dir, read_solution, read_solution_dir, write_file, append_comment
+from analysis import print_outliers
+from utils import format_elapsed
 from plots import PLOT_TYPES, plot
 from checker import check_puzzle
 
@@ -23,14 +25,18 @@ SOLVERS = {
     "pattern_6": z3solver.solve_qf_ia_p6,
     "pattern_7": z3solver.solve_qf_ia_p7,
     "pattern_8": z3solver.solve_qf_ia_p8,
+    "white_neighbours": z3solver.solve_r_white_neighbours,
+    "atleast_whites": z3solver.solve_r_atleast_whites,
+    "atmost_blacks": z3solver.solve_r_atmost_blacks,
+    "corner_implications": z3solver.solve_r_corner_implications,
+    "pair_implications": z3solver.solve_r_pair_implications,
+    "between": z3solver.solve_r_between,
+    "force_double_edge": z3solver.solve_r_force_double_edge,
+    "close_edge": z3solver.solve_r_close_edge,
+    "bridges": z3solver.solve_r_bridges,
+    "all": z3solver.solve_all,
+    "best": z3solver.solve_best
 }
-
-def _format_elapsed(elapsed: float) -> str:
-    if elapsed < 1.0:
-        ms = elapsed*1000
-        return f"{ms:.3f} ms"
-    else:
-        return f"{elapsed:.6f} s"
 
 def _check_command(args):
     solutions = []
@@ -79,27 +85,25 @@ def _solve_command(args):
 
         for solver in args.solvers:
             start = time.perf_counter()
-            solution, statistics = SOLVERS[solver](puzzle)
+            solution, solver_statistics, puzzle_statistics = SOLVERS[solver](puzzle)
             end = time.perf_counter()
             elapsed = end-start
-            print(f"Solved {len(puzzle)}x{len(puzzle)} puzzle {fname} using {solver} solver in {_format_elapsed(elapsed)}")
+            print(f"Solved {len(puzzle)}x{len(puzzle)} puzzle {fname} using {solver} solver in {format_elapsed(elapsed)}")
 
             results.append({
                 "puzzle": fname,
                 "size": n,
                 "solver": solver,
                 "elapsed": elapsed,
-                "statistics": statistics
+                "statistics": solver_statistics,
+                "puzzle_statistics": puzzle_statistics
             })
 
             if best_elapsed is None or elapsed < best_elapsed:
                 best_elapsed = elapsed
                 best_solution = solution
-                best_statistics = statistics
+                best_statistics = solver_statistics
                 best_solver = solver
-
-        if len(args.solvers) > 1 and best_solver is not None:
-            print(f"Fastest for {fname}: {best_solver}")
 
         if args.write and best_solver is not None:
             absolute_path = os.path.abspath(path)
@@ -118,7 +122,7 @@ def _solve_command(args):
             os.makedirs(os.path.dirname(solution_path), exist_ok=True)
 
             statistics_str = "\n".join(f"{k}: {v}" for k, v in best_statistics.items())
-            comment = f"Solved in {_format_elapsed(best_elapsed)} using {best_solver}\n{statistics_str}\n"
+            comment = f"Solved in {format_elapsed(best_elapsed)} using {best_solver}\n{statistics_str}\n"
             write_file(solution_path, best_solution, seed, comment)
 
     if args.plot is not None:
@@ -128,6 +132,42 @@ def _solve_command(args):
             args_plot = args.plot if isinstance(args.plot, list) else [args.plot]
             for plt in args_plot:
                 plot(plt, results)
+
+def _analyze_command(args):
+    puzzles = []
+    if args.file:
+        args_file = args.file if isinstance(args.file, list) else [args.file]    
+        for file in args_file:
+            puzzles.append(read_puzzle(file, args.strict))
+    if args.folder:
+        args_folder = args.folder if isinstance(args.folder, list) else [args.folder]
+        for folder in args_folder:
+            puzzles.extend(read_puzzle_dir(folder, args.recursive, args.strict))
+    
+    results = []
+    for run in range(args.runs):
+        for path, puzzle, _ in puzzles:
+            fname = os.path.splitext(os.path.basename(path))[0]
+            n = len(puzzle)
+
+            for solver in args.solvers:
+                start = time.perf_counter()
+                _, solver_statistics, puzzle_statistics = SOLVERS[solver](puzzle)
+                end = time.perf_counter()
+                elapsed = end-start
+                print(f"Run {run+1}: Solved {len(puzzle)}x{len(puzzle)} puzzle {fname} using {solver} solver in {format_elapsed(elapsed)}")
+
+                results.append({
+                    "run": run,
+                    "puzzle": fname,
+                    "size": n,
+                    "solver": solver,
+                    "elapsed": elapsed,
+                    "statistics": solver_statistics,
+                    "puzzle_statistics": puzzle_statistics
+                })
+    
+    print_outliers(results, 2.0)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Hitori SMT solver and checker")
@@ -152,6 +192,16 @@ if __name__ == "__main__":
     check_parser.add_argument("-s", "--strict", action="store_true", help="Exit when wrong file type is found")
     check_parser.add_argument("-w", "--write", action="store_true", help="Write to file")
     check_parser.set_defaults(func=_check_command)
+
+    analyze_parser = subparsers.add_parser("analyze", help="Analyze puzzles using the SMT solver")
+    group_analyze = analyze_parser.add_mutually_exclusive_group(required=True)
+    group_analyze.add_argument("-f", "--file", action="append", type=str, help="Path to a puzzle file")
+    group_analyze.add_argument("-d", "--folder", action="append", type=str, help="Path to folder containing puzzle files")
+    analyze_parser.add_argument("-r", "--recursive", action="store_true", help="Recursively read subfolders")
+    analyze_parser.add_argument("-s", "--strict", action="store_true", help="Exit when wrong file type is found")
+    analyze_parser.add_argument("-i", "--runs", default=1, type=int, help="Number of runs to complete")
+    analyze_parser.add_argument("solvers", nargs="+", choices=SOLVERS.keys(), help="One or more solver variants to run")
+    analyze_parser.set_defaults(func=_analyze_command)
 
     args = parser.parse_args()
     args.func(args)
