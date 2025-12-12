@@ -1,5 +1,6 @@
 import os
 import sys
+import ast
 
 PUZZLE_EXTENSIONS = [".singles"]
 SOLUTION_EXTENSIONS = [".singlessol"]
@@ -120,3 +121,41 @@ def append_comment(path: str, comment: str) -> None:
     with open(path, "a") as file:
         for line in comment.splitlines():
             file.write(f"\n#{line}")
+
+def append_dict(path: str, new_dict: dict) -> None:
+    with open(path, "r") as file:
+        lines = file.readlines()
+    
+    try:
+        n = int(lines[0].strip())
+    except (ValueError, IndexError):
+        sys.exit(f"Error: First line must contain size in {path}")
+
+    try:
+        header = lines[:n+4]
+        comments = lines[n+4:] if len(lines) > n+4 else []
+    except IndexError:
+        sys.exit(f"Error: Wrong number if lines in file {path}")
+    
+    data = {}
+    for line in comments:
+        line = line.strip()
+        if not line.startswith("# ~["):
+            continue
+        try:
+            tkey, tvalue = line[4:].split("]:", 1)
+            key = tkey.strip()
+            value = ast.literal_eval(tvalue.strip())
+            data[key] = value
+        except Exception:
+            continue
+    
+    data.update(new_dict)
+    comments = [l for l in comments if not l.strip().startswith("# ~[")]
+    if comments and comments[-1].strip() != "":
+        comments.append("\n")
+    comments.extend([f"# ~[{k}]: {repr(v)}\n" for k, v in data.items()])
+
+    with open(path, "w") as file:
+        file.writelines(header+comments)
+        
