@@ -1,7 +1,7 @@
 from z3 import * # type: ignore
 
 # Distinct tactic following Z3py basics, SMT/SAT describes a one-hot approach for latin squares
-def uniqueness_pairs(s: Solver, colored: list, puzzle: list, n: int) -> None:
+def uniqueness_pairs(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
     for i in range(n):
         for j in range(n):
             for k in range(j+1, n):
@@ -16,7 +16,7 @@ def uniqueness_pairs(s: Solver, colored: list, puzzle: list, n: int) -> None:
                     s.add(Or(colored[j][i], colored[k][i]))
 
 # Alternate implemention of the uniquecells constraint by counting the values and asserting at most 1 value per column and row
-def uniqueness_atmost(s: Solver, colored: list, puzzle: list, n: int) -> None:
+def uniqueness_atmost(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
     for i in range(n):
         row_values = {}
         col_values = {}
@@ -48,7 +48,7 @@ def uniqueness_atmost(s: Solver, colored: list, puzzle: list, n: int) -> None:
 
 # Trivial, remove i-1 and j-1, since we already check those in earlier cells
 # Van der Knijff uses a slightly different approach where two cells cannot be both white if they have equal numbers
-def neighbours(s: Solver, colored: list, puzzle: list, n: int) -> None:
+def neighbours(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
     for i in range(n):
         for j in range(n):
             if i+1 < n:
@@ -58,14 +58,17 @@ def neighbours(s: Solver, colored: list, puzzle: list, n: int) -> None:
                 # Vertical neighbours
                 s.add(Not(And(colored[i][j], colored[i][j+1])))
 
-def connectivity_ranking(s: Solver, colored: list, puzzle: list, n: int) -> None:
+def connectivity_ranking(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
     root_row = Int("root_r")
+    encoding_size["int_vars"] += 1
     root_col = Int("root_c")
+    encoding_size["int_vars"] += 1
     s.add(root_row == 0)
     s.add(Or(root_col == 0, root_col == 1))
     s.add(Or(And(root_col == 0, Not(colored[0][0])), And(root_col == 1, Not(colored[0][1]))))
 
     rank = [[Int(f"num_{r}_{c}") for c in range(n)] for r in range(n)]
+    encoding_size["int_vars"] += n*n
 
     for i in range(n):
         for j in range(n):
@@ -91,10 +94,12 @@ def connectivity_ranking(s: Solver, colored: list, puzzle: list, n: int) -> None
                         Or(*conditions)
                     ))
                 
-def connectivity_ranking_alt(s: Solver, colored: list, puzzle: list, n: int) -> None:
+def connectivity_ranking_alt(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
     max_rank = n*n-1
     rank = [[Int(f"rank_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["int_vars"] += n*n
     root = [[Bool(f"root_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["bool_vars"] += n*n
 
     root_flat = [root[i][j] for i in range(n) for j in range(n)]
     s.add(PbEq([(r, 1) for r in root_flat], 1))
@@ -123,15 +128,21 @@ def connectivity_ranking_alt(s: Solver, colored: list, puzzle: list, n: int) -> 
                         Or(*conditions)
                     ))
                 
-def connectivity_tree(s: Solver, colored: list, puzzle: list, n: int) -> None:
+def connectivity_tree(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
     max_rank = n*n-1
     depth = [[Int(f"rank_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["int_vars"] += n*n
     root = [[Bool(f"root_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["bool_vars"] += n*n
 
     parent_up = [[Bool(f"Up_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["bool_vars"] += n*n
     parent_down = [[Bool(f"Down_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["bool_vars"] += n*n
     parent_left = [[Bool(f"Left_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["bool_vars"] += n*n
     parent_right = [[Bool(f"Right_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["bool_vars"] += n*n
 
     root_flat = [root[i][j] for i in range(n) for j in range(n)]
     s.add(PbEq([(r, 1) for r in root_flat], 1))
@@ -160,24 +171,29 @@ def connectivity_tree(s: Solver, colored: list, puzzle: list, n: int) -> None:
             else:
                 s.add(Not(parent_right[i][j]))
                 
-def connectivity_bitvector(s: Solver, colored: list, puzzle: list, n: int) -> None:
+def connectivity_bitvector(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
     max_num = n*n+1
     k = max_num.bit_length()
 
     root_row = BitVec("root_r", k)
+    encoding_size["bv_vars"] += 1
     root_col = BitVec("root_c", k)
+    encoding_size["bv_vars"] += 1
     zero_bv = BitVecVal(0, k)
     n_bv = BitVecVal(n, k)
     max_bv = BitVecVal(max_num, k)
     max_valid = BitVecVal(max_num-1, k)
 
     is_white = [[Bool(f"white_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["bool_vars"] += n*n
     is_root = [[Bool(f"root_{i}_{j}") for j in range(n)] for i in range(n)]
+    encoding_size["bool_vars"] += n*n
 
     s.add(ULT(root_row, n_bv))
     s.add(ULT(root_col, n_bv))
 
     Number = [[BitVec(f"num_{r}_{c}", k) for c in range(n)] for r in range(n)]
+    encoding_size["bv_vars"] += n*n
 
     row_bvs = [BitVecVal(i, k) for i in range(n)]
     col_bvs = [BitVecVal(i, k) for i in range(n)]
@@ -210,15 +226,18 @@ def connectivity_bitvector(s: Solver, colored: list, puzzle: list, n: int) -> No
             if conditions:
                 s.add(Implies(And(is_white[i][j], Not(is_root[i][j])), Or(*conditions)))
 
-def connectivity_boolean(s: Solver, colored: list, puzzle: list, n: int) -> None:
+def connectivity_boolean(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
     max_steps = n*n+1
     root00 = Bool("root_0_0")
+    encoding_size["bool_vars"] += 1
     root01 = Bool("root_0_1")
+    encoding_size["bool_vars"] += 1
     s.add(Xor(root00, root01))
     s.add(Implies(root00, Not(colored[0][0])))
     s.add(Implies(root01, Not(colored[0][1])))
 
     visited = [[[Bool(f"visited_{k}_{i}_{j}") for j in range(n)] for i in range(n)] for k in range(max_steps+1)]
+    encoding_size["bool_vars"] += n*n*(max_steps+1)
     for i in range(n):
         for j in range(n):
             if i == 0 and j == 0:

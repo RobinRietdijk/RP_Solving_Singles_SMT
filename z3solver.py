@@ -38,7 +38,7 @@ def _add_constraint_connectivity_cut(s: Solver, component: list, colored: list, 
     s.add(Or(Or(colored[i][j] for (i, j) in component), Or(Not(colored[i][j]) for (i, j) in boundary)))
 
 
-def _solve(s: Solver, puzzle: list, colored: list, n: int) -> tuple[bool, list|None, dict|None, dict|None]:
+def _solve(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> tuple[bool, list|None, dict|None, dict|None]:
     result = s.check()
     if result == unsat:
         sys.exit(f"Error: Could not find a satisfiable answer to the puzzle")
@@ -64,6 +64,7 @@ def _solve(s: Solver, puzzle: list, colored: list, n: int) -> tuple[bool, list|N
             "black_cells": black_cells
         }
     st = s.statistics()
+    encoding_size["assertions"] = len(s.assertions())
     solver_statistics = {
         "restarts": st.get_key_value("restarts") if "restarts" in st.keys() else 0,
         "propagations": st.get_key_value("propagations") if "propagations" in st.keys() else 0,
@@ -76,17 +77,18 @@ def _solve(s: Solver, puzzle: list, colored: list, n: int) -> tuple[bool, list|N
         "memory": st.get_key_value("memory") if "memory" in st.keys() else 0,
         "max_memory": st.get_key_value("max memory") if "max memory" in st.keys() else 0,
         "time": st.get_key_value("time") if "time" in st.keys() else 0,
+        "encoding_size": encoding_size
     }
-
     timed_out = solution is None
     return timed_out, solution, solver_statistics, puzzle_statistics
 
 
-def _solve_lazy(s: Solver, colored: list, puzzle: list, n: int) -> tuple[bool, list|None, dict|None, dict|None]:
+def _solve_lazy(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> tuple[bool, list|None, dict|None, dict|None]:
     start = time.perf_counter()
     while True:
         if start + time.perf_counter() >= TIMEOUT:
             st = s.statistics()
+            encoding_size["assertions"] = len(s.assertions())
             solver_statistics = {
                 "propagations": st.get_key_value("propagations") if "propagations" in st.keys() else 0,
                 "rlimit": st.get_key_value("rlimit count") if "rlimit count" in st.keys() else 0,
@@ -98,6 +100,7 @@ def _solve_lazy(s: Solver, colored: list, puzzle: list, n: int) -> tuple[bool, l
                 "memory": st.get_key_value("memory") if "memory" in st.keys() else 0,
                 "max_memory": st.get_key_value("max memory") if "max memory" in st.keys() else 0,
                 "time": st.get_key_value("time") if "time" in st.keys() else 0,
+                "encoding_size": encoding_size
             }
             
             return False, None, solver_statistics, None
@@ -115,67 +118,69 @@ def _solve_lazy(s: Solver, colored: list, puzzle: list, n: int) -> tuple[bool, l
         
         component = components[1]
         _add_constraint_connectivity_cut(s, component, colored, n)
-    return _solve(s, colored, puzzle, n)
+    return _solve(s, colored, puzzle, n, encoding_size)
 
 
-def _init_solver(n: int, seed: int|None) -> tuple[Solver, list]:
+def _init_solver(n: int, seed: int|None) -> tuple[Solver, list, dict]:
     s = Solver()
+    encoding_size = { "int_vars": 0, "bool_vars": 0, "bv_vars": 0 }
     s.set("timeout", TIMEOUT)
     if seed:
         s.set("random_seed", seed)
         
     colored = [[Bool(f"B_{i},{j}") for j in range(n)] for i in range(n)]
-    return s, colored
+    encoding_size["bool_vars"] += n*n
+    return s, colored, encoding_size
 
 
 def solve(base: Callable, constraints: list, puzzle: list, seed: int|None = None) -> tuple[bool, list|None, dict|None, dict|None]:
     n = len(puzzle)
-    s, colored = _init_solver(n, seed)
-    base(s, colored, puzzle, n)
+    s, colored, encoding_size = _init_solver(n, seed)
+    base(s, colored, puzzle, n, encoding_size)
     for constraint in constraints:
-        constraint(s, colored, puzzle, n)
+        constraint(s, colored, puzzle, n, encoding_size)
     
     if base == lazy:
-        _solve_lazy(s, colored, puzzle, n)
-    return _solve(s, colored, puzzle, n)
+        _solve_lazy(s, colored, puzzle, n, encoding_size)
+    return _solve(s, colored, puzzle, n, encoding_size)
 
 
-def qf_ia(s: Solver, colored: list, puzzle: list, n: int) -> None:
-    z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, puzzle, n)
-    z3solver_base.connectivity_ranking(s, colored, puzzle, n)
+def qf_ia(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    z3solver_base.uniqueness_pairs(s, colored, puzzle, n, encoding_size)
+    z3solver_base.neighbours(s, colored, puzzle, n, encoding_size)
+    z3solver_base.connectivity_ranking(s, colored, puzzle, n, encoding_size)
 
 
-def qf_ia_alt_u(s: Solver, colored: list, puzzle: list, n: int) -> None:
-    z3solver_base.uniqueness_atmost(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, puzzle, n)
-    z3solver_base.connectivity_ranking(s, colored, puzzle, n)
+def qf_ia_alt_u(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    z3solver_base.uniqueness_atmost(s, colored, puzzle, n, encoding_size)
+    z3solver_base.neighbours(s, colored, puzzle, n, encoding_size)
+    z3solver_base.connectivity_ranking(s, colored, puzzle, n, encoding_size)
 
 
-def qf_ia_alt_c(s: Solver, colored: list, puzzle: list, n: int) -> None:
-    z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, puzzle, n)
-    z3solver_base.connectivity_ranking_alt(s, colored, puzzle, n)
+def qf_ia_alt_c(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    z3solver_base.uniqueness_pairs(s, colored, puzzle, n, encoding_size)
+    z3solver_base.neighbours(s, colored, puzzle, n, encoding_size)
+    z3solver_base.connectivity_ranking_alt(s, colored, puzzle, n, encoding_size)
 
 
-def qf_ia_tree_c(s: Solver, colored: list, puzzle: list, n: int) -> None:
-    z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, puzzle, n)
-    z3solver_base.connectivity_tree(s, colored, puzzle, n)
+def qf_ia_tree_c(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    z3solver_base.uniqueness_pairs(s, colored, puzzle, n, encoding_size)
+    z3solver_base.neighbours(s, colored, puzzle, n, encoding_size)
+    z3solver_base.connectivity_tree(s, colored, puzzle, n, encoding_size)
 
 
-def qf_bv(s: Solver, colored: list, puzzle: list, n: int) -> None:
-    z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, puzzle, n)
-    z3solver_base.connectivity_bitvector(s, colored, puzzle, n)
+def qf_bv(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    z3solver_base.uniqueness_pairs(s, colored, puzzle, n, encoding_size)
+    z3solver_base.neighbours(s, colored, puzzle, n, encoding_size)
+    z3solver_base.connectivity_bitvector(s, colored, puzzle, n, encoding_size)
 
 
-def boolean(s: Solver, colored: list, puzzle: list, n: int) -> None:
-    z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, puzzle, n)
-    z3solver_base.connectivity_boolean(s, colored, puzzle, n)
+def boolean(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    z3solver_base.uniqueness_pairs(s, colored, puzzle, n, encoding_size)
+    z3solver_base.neighbours(s, colored, puzzle, n, encoding_size)
+    z3solver_base.connectivity_boolean(s, colored, puzzle, n, encoding_size)
 
 
-def lazy(s: Solver, colored: list, puzzle: list, n: int) -> None:
-    z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, puzzle, n)
+def lazy(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    z3solver_base.uniqueness_pairs(s, colored, puzzle, n, encoding_size)
+    z3solver_base.neighbours(s, colored, puzzle, n, encoding_size)
