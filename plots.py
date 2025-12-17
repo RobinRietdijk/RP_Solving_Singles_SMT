@@ -34,7 +34,7 @@ plt.rcParams.update({
     "grid.linestyle": "-", 
 })
 
-plt.rcParams["axes.prop_cycle"] = plt.cycler(color=[
+plt.rcParams["axes.prop_cycle"] = plt.cycler(color=[ # type: ignore
     "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
     "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
     "#a6cee3", "#fb9a99", "#fdbf6f", "#b2df8a", "#cab2d6",
@@ -43,7 +43,7 @@ plt.rcParams["axes.prop_cycle"] = plt.cycler(color=[
 
 LINE_STYLES = ["-", "--", "-.", ":"]
 
-def _plot_puzzleruntime(results):
+def _plot_puzzleruntime(results: dict) -> None:
     by_size = {}
     for r in results:
         size = r["size"]
@@ -91,7 +91,7 @@ def _plot_puzzleruntime(results):
         plt.close()
         print(f"Saved {out_path}")
 
-def _plot_puzzlestatistic(results, statistic, y_label):
+def _plot_puzzlestatistic(results: dict, statistic: str, y_label: str) -> None:
     by_size = {}
     for r in results:
         size = r["size"]
@@ -140,20 +140,20 @@ def _plot_puzzlestatistic(results, statistic, y_label):
         plt.close()
         print(f"Saved {out_path}")
 
-def _plot_puzzleconflicts(results):
+def _plot_puzzleconflicts(results: dict) -> None:
     _plot_puzzlestatistic(results, "conflicts", "Conflicts")
-def _plot_puzzlepropagations(results):
+def _plot_puzzlepropagations(results: dict) -> None:
     _plot_puzzlestatistic(results, "propagations", "Propagations")
-def _plot_puzzledecisions(results):
+def _plot_puzzledecisions(results: dict) -> None:
     _plot_puzzlestatistic(results, "decisions", "Decisions")
-def _plot_puzzleboolvars(results):
+def _plot_puzzleboolvars(results: dict) -> None:
     _plot_puzzlestatistic(results, "bool_vars", "Boolean variables")
-def _plot_puzzleclauses(results):
+def _plot_puzzleclauses(results: dict) -> None:
     _plot_puzzlestatistic(results, "clauses", "Clauses")
-def _plot_puzzlebinclauses(results):
+def _plot_puzzlebinclauses(results: dict) -> None:
     _plot_puzzlestatistic(results, "bin_clauses", "Binary clauses")
     
-def _plot_avgruntime(results):
+def _plot_avgruntime(results: dict) -> None:
     sums = {}
     counts = {}
 
@@ -196,7 +196,7 @@ def _plot_avgruntime(results):
         plt.close()
         print(f"Saved {out_path}")
 
-def _plot_avgstatistic(results, statistic, y_label):
+def _plot_avgstatistic(results: dict, statistic: str, y_label: str) -> None:
     sums = {}
     counts = {}
 
@@ -239,20 +239,20 @@ def _plot_avgstatistic(results, statistic, y_label):
         plt.close()
         print(f"Saved {out_path}")
 
-def _plot_avgconflicts(results):
+def _plot_avgconflicts(results: dict) -> None:
     _plot_avgstatistic(results, "conflicts", "Averge conflicts")
-def _plot_avgpropagations(results):
+def _plot_avgpropagations(results: dict) -> None:
     _plot_avgstatistic(results, "propagations", "Averge propagations")
-def _plot_avgdecisions(results):
+def _plot_avgdecisions(results: dict) -> None:
     _plot_avgstatistic(results, "decisions", "Averge decisions")
-def _plot_avgboolvars(results):
+def _plot_avgboolvars(results: dict) -> None:
     _plot_avgstatistic(results, "bool_vars", "Averge Boolean variables")
-def _plot_avgclauses(results):
+def _plot_avgclauses(results: dict) -> None:
     _plot_avgstatistic(results, "clauses", "Averge clauses")
-def _plot_avgbinclauses(results):
+def _plot_avgbinclauses(results: dict) -> None:
     _plot_avgstatistic(results, "bin_clauses", "Averge binary clauses")
 
-def _plot_scalingavgruntime(results):
+def _plot_scalingavgruntime(results: dict) -> None:
     sums = {}
     counts = {}
 
@@ -293,7 +293,7 @@ def _plot_scalingavgruntime(results):
     plt.close()
     print(f"Saved {out_path}")
 
-def _plot_scalingavgstatistic(results, statistic, y_label, plot_name):
+def _plot_scalingavgstatistic(results: dict, statistic: str, y_label: str, plot_name: str) -> None:
     sums = {}
     counts = {}
 
@@ -334,17 +334,17 @@ def _plot_scalingavgstatistic(results, statistic, y_label, plot_name):
     plt.close()
     print(f"Saved {out_path}")
 
-def _plot_scalingavgconflicts(results):
+def _plot_scalingavgconflicts(results: dict) -> None:
     _plot_scalingavgstatistic(results, "conflicts", "Average number of conflicts", "Average number of conflicts by puzzle size")
-def _plot_scalingavgpropagations(results):
+def _plot_scalingavgpropagations(results: dict) -> None:
     _plot_scalingavgstatistic(results, "propagations", "Average number of propagations", "Average number of propagations by puzzle size")
-def _plot_scalingavgdecisions(results):
+def _plot_scalingavgdecisions(results: dict) -> None:
     _plot_scalingavgstatistic(results, "decisions", "Average number of decisions", "Average number of decisions by puzzle size")
-def _plot_scalingavgboolvars(results):
+def _plot_scalingavgboolvars(results: dict) -> None:
     _plot_scalingavgstatistic(results, "bool_vars", "Average number of Boolean variables", "Average encoding size by puzzle size (bool_vars)")
-def _plot_scalingavgclauses(results):
+def _plot_scalingavgclauses(results: dict) -> None:
     _plot_scalingavgstatistic(results, "clauses", "Average number of clauses", "Average encoding size by puzzle size (clauses)")
-def _plot_scalingavgbinclauses(results):
+def _plot_scalingavgbinclauses(results: dict) -> None:
     _plot_scalingavgstatistic(results, "bin_clauses", "Average number of binary clauses", "Average encoding size by puzzle size (bin_clauses)")
 
 PLOT_TYPES = {
@@ -518,7 +518,7 @@ PLOT_TYPES = {
     }
 }
 
-def plot(id: int, results: list[dict]) -> None:
+def plot(id: int, results: list) -> None:
     if id not in PLOT_TYPES:
         print(f"Unknown plot id {id}")
         return

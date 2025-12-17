@@ -85,7 +85,7 @@ def _read_files(file: str|list, folder: str|list, recursive: bool, strict: bool,
     return results
 
 
-def _run_solver(solver: dict, puzzle: list, seed: int|None = None) -> tuple[list, dict, dict, float]:
+def _run_solver(solver: dict, puzzle: list, seed: int|None = None) -> tuple[list|None, dict|None, dict|None, float]:
     """ Helper function to run the solver on a puzzle
 
     Args:
@@ -115,6 +115,8 @@ def _check_command(args: dict) -> None:
     Args:
         args (dict): CLI arguments given for this command
     """
+    if ["file"] not in args:
+        return
     solutions = _read_files(args.file, args.folder, args.recursive, args.strict, False)
 
     for path, solution, _ in solutions:

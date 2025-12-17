@@ -1,4 +1,4 @@
-from z3 import *
+from z3 import * # type: ignore
 
 # Redundant constraint to make sure evert white cell has atleast one white neighbour
 def white_neighbours(s: Solver, colored: list, puzzle: list, n: int) -> None:

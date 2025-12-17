@@ -1,4 +1,4 @@
-from z3 import *
+from z3 import * # type: ignore
 
 # Redundant constraint to make sure there is at least n / 2 in each row and column
 def least_whites(s: Solver, colored: list, puzzle: list, n: int) -> None:

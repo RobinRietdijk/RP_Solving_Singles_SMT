@@ -53,7 +53,7 @@ def _parse_file(path: str) -> tuple[list[list[int|str]], str|None]:
     
     return grid, seed
 
-def _read_file(path: str, puzzles: bool, strict: bool) -> list[tuple[str, list[list[int|str]], str|None]]:
+def _read_file(path: str, puzzles: bool, strict: bool) -> list:
     if not os.path.exists(path):
         sys.exit(f"Error: File does not exist at {path}")
     if (puzzles and not _is_puzzle(path)) or (not puzzles and not _is_solution(path)):
@@ -66,7 +66,7 @@ def _read_file(path: str, puzzles: bool, strict: bool) -> list[tuple[str, list[l
     grid, seed = _parse_file(path)
     return [(path, grid, seed)]
 
-def _read_dir(path: str, puzzles: bool, strict: bool, recursive: bool) -> list[tuple[str, list[list[int|str]], str|None]]:
+def _read_dir(path: str, puzzles: bool, strict: bool, recursive: bool) -> list:
     if not os.path.isdir(path):
         sys.exit(f"Error: Not a directory at {path}")
 
@@ -82,31 +82,31 @@ def _read_dir(path: str, puzzles: bool, strict: bool, recursive: bool) -> list[t
         grids.extend(_read_file(file, puzzles, strict))
     return grids
 
-def read_puzzle(path: str, strict: bool) -> tuple[str, list[list[int|str]], str]:
+def read_puzzle(path: str, strict: bool) -> tuple[str, list, str]:
     result = _read_file(path, True, strict)
     if not result:
         sys.exit(f"Error: No puzzle file found at {path}")
     return result[0]
 
-def read_solution(path: str, strict: bool) -> tuple[str, list[list[int|str]], str]:
+def read_solution(path: str, strict: bool) -> tuple[str, list, str]:
     result = _read_file(path, False, strict)
     if not result:
         sys.exit(f"Error: No solution file found at {path}")
     return result[0]
 
-def read_puzzle_dir(path: str, recursive: bool, strict: bool) -> list[tuple[str, list[list[int|str]], str|None]]:
+def read_puzzle_dir(path: str, recursive: bool, strict: bool) -> list:
     puzzles = _read_dir(path, True, strict, recursive)
     if not puzzles:
         sys.exit(f"Error: No puzzle files found in {path}")
     return puzzles
 
-def read_solution_dir(path: str, recursive: bool, strict: bool) -> list[tuple[str, list[list[int|str]], str|None]]:
+def read_solution_dir(path: str, recursive: bool, strict: bool) -> list:
     solutions = _read_dir(path, False, strict, recursive)
     if not solutions:
         sys.exit(f"Error: No solution files found in {path}")
     return solutions
 
-def write_file(path: str, puzzle: list[list[int|str]], seed: str|None, extra: str|None) -> None:
+def write_file(path: str, puzzle: list, seed: str|None, extra: str|None) -> None:
     with open(path, "w") as file:
         file.write(f"{len(puzzle)}\n\n")
         for row in puzzle:

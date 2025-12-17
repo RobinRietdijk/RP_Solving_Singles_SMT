@@ -4,7 +4,7 @@ from statistics import mean, stdev
 from utils import format_elapsed
 from collections import Counter
 
-def _zscore(x: int, mu: float, sigma: float) -> float:
+def _zscore(x: int|float, mu: float, sigma: float) -> float:
     return (x-mu)/sigma if sigma > 0 else 0.0
 
 def _safe_div(x: int|float, y: int|float) -> float:
@@ -29,7 +29,7 @@ def _flatten_results(results: dict) -> list:
         flattened_results.append(entry)
     return flattened_results
 
-def _group_by_size(results: dict, fields: list) -> dict:
+def _group_by_size(results: list, fields: list) -> dict:
     by_size = {}
     for rs in results:
         key = (rs["solver"], rs["size"])
@@ -67,7 +67,7 @@ def _calculate_stats(results: dict, fields: list) -> list:
 def _index_by_solver_size(results: list) -> dict:
     return {(rs["solver"], rs["size"]): rs for rs in results}
 
-def find_difficult(results: dict, hard_threshold: float = 3.0, easy_threshold: float = 3.0, print: bool = True) -> None:
+def find_difficult(results: dict, hard_threshold: float = 3.0, easy_threshold: float = 3.0, do_print: bool = True) -> tuple[dict, dict]:
     if results is None:
         return 
     
@@ -274,7 +274,7 @@ def find_difficult(results: dict, hard_threshold: float = 3.0, easy_threshold: f
                         f"z_R/D={z_ratios['z_rrd']:.2f} "
                         f"z_T/R={z_ratios['z_rtr']:.2f}\n")
         
-        if print:
+        if do_print:
             print_difficulty("Hard puzzles", hard, "hard_score", hard_threshold)
             print_difficulty("Easy puzzles", easy, "easy_score", easy_threshold)
 
@@ -310,7 +310,7 @@ def print_outlying_puzzles(threshold: float, puzzle_statistics: dict) -> None:
                     parts.append(f"{prop}={raw} {z_key}={z_val:+.2f}")
             print(f"{fname} ({n}x{n}): " + " ".join(parts))
 
-def _find_pairs_and_triplets(puzzle: list[list[int]], n: int) -> tuple[int, int]:
+def _find_pairs_and_triplets(puzzle: list, n: int) -> tuple[int, int]:
     pairs = 0
     triplets = 0
     for i in range(n):
@@ -338,7 +338,7 @@ def _find_pairs_and_triplets(puzzle: list[list[int]], n: int) -> tuple[int, int]
                 j += 1
     return pairs, triplets
 
-def _find_isolated(puzzle: list[list[int]], n: int) -> int:
+def _find_isolated(puzzle: list, n: int) -> int:
     isolated = 0
     for i in range(n):
         row_map = {}
@@ -381,7 +381,7 @@ def _find_isolated(puzzle: list[list[int]], n: int) -> int:
                 isolated += 1
     return isolated
 
-def _cross_duplicates(puzzle: list[list[int]], n: int) -> int:
+def _cross_duplicates(puzzle: list, n: int) -> int:
     rows = [[False]*n for _ in range(n)]
     cols = [[False]*n for _ in range(n)]
 
@@ -400,7 +400,7 @@ def _cross_duplicates(puzzle: list[list[int]], n: int) -> int:
     
     return sum(1 for i in range(n) for j in range(n) if rows[i][j] and cols[i][j])
 
-def _value_entropy(line: list[int]) -> float:
+def _value_entropy(line: list) -> float:
     total = len(line)
     if total == 0:
         return 0.0
@@ -411,7 +411,7 @@ def _value_entropy(line: list[int]) -> float:
         entropy -= p*math.log2(p)
     return entropy
 
-def _entropy_difficulty(puzzle: list[list[int]], n: int) -> float:
+def _entropy_difficulty(puzzle: list, n: int) -> float:
     row_entropy = [_value_entropy(puzzle[i]) for i in range(n)]
     col_entropy = [_value_entropy([puzzle[i][j] for i in range(n)]) for j in range(n)]
 
@@ -423,7 +423,7 @@ def _entropy_difficulty(puzzle: list[list[int]], n: int) -> float:
     entropy_variation = row_std+col_std
     return mean_entropy-entropy_variation
 
-def analyze_puzzle_statistics(puzzles: list[list[list[int]]]) -> dict:
+def analyze_puzzle_statistics(puzzles: list) -> dict:
     puzzle_dict = {}
     for path, puzzle, _ in puzzles:
         fname = os.path.splitext(os.path.basename(path))[0]

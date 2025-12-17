@@ -1,12 +1,12 @@
 import sys
 import time
 import z3solver_base
-from z3 import *
+from z3 import * # type: ignore
 
 TIMEOUT = 10000
 
 
-def _find_white_components(white_cells, n):
+def _find_white_components(white_cells: list, n: int) -> list:
     visited = [[False]*n for _ in range(n)]
     components = []
 
@@ -28,7 +28,7 @@ def _find_white_components(white_cells, n):
     return components
 
 
-def _add_constraint_connectivity_cut(s, component, colored, n):
+def _add_constraint_connectivity_cut(s: Solver, component: list, colored: list, n: int) -> None:
     boundary = set()
     for (i, j) in component:
         for (ni, nj) in [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]:
@@ -38,7 +38,7 @@ def _add_constraint_connectivity_cut(s, component, colored, n):
     s.add(Or(Or(colored[i][j] for (i, j) in component), Or(Not(colored[i][j]) for (i, j) in boundary)))
 
 
-def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRef]]) -> tuple[bool, list[list[str]]|None, dict|None, dict|None]:
+def _solve(s: Solver, puzzle: list, colored: list, n: int) -> tuple[bool, list|None, dict|None, dict|None]:
     result = s.check()
     if result == unsat:
         sys.exit(f"Error: Could not find a satisfiable answer to the puzzle")
@@ -47,7 +47,7 @@ def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRe
         puzzle_statistics = None
     else:
         m = s.model()
-        sat_model = [[m.evaluate(colored[r][c]) == True for c in range(n)] for r in range(n)]
+        sat_model = [[z3.is_true(m.evaluate(colored[r][c])) for c in range(n)] for r in range(n)]
         black_cells = 0
         solution = []
         for i in range(n):
@@ -82,7 +82,7 @@ def _solve(s: Solver, n: int, puzzle: list[list[int]], colored: list[list[BoolRe
     return timed_out, solution, solver_statistics, puzzle_statistics
 
 
-def _solve_lazy(s: Solver, colored: list, n: int) -> None:
+def _solve_lazy(s: Solver, colored: list, puzzle: list, n: int) -> tuple[bool, list|None, dict|None, dict|None]:
     start = time.perf_counter()
     while True:
         if start + time.perf_counter() >= TIMEOUT:
@@ -115,9 +115,10 @@ def _solve_lazy(s: Solver, colored: list, n: int) -> None:
         
         component = components[1]
         _add_constraint_connectivity_cut(s, component, colored, n)
+    return _solve(s, colored, puzzle, n)
 
 
-def _init_solver(n: int, seed: int) -> tuple[Solver, list]:
+def _init_solver(n: int, seed: int|None) -> tuple[Solver, list]:
     s = Solver()
     s.set("timeout", TIMEOUT)
     if seed:
@@ -127,56 +128,54 @@ def _init_solver(n: int, seed: int) -> tuple[Solver, list]:
     return s, colored
 
 
-def solve(base: Callable, constraints: list, puzzle: list, seed: int = None) -> tuple[bool, list|None, dict|None, dict|None]:
+def solve(base: Callable, constraints: list, puzzle: list, seed: int|None = None) -> tuple[bool, list|None, dict|None, dict|None]:
     n = len(puzzle)
-    vars = 0
-    rules = 0
     s, colored = _init_solver(n, seed)
     base(s, colored, puzzle, n)
     for constraint in constraints:
         constraint(s, colored, puzzle, n)
     
     if base == lazy:
-        _solve_lazy()
-    return _solve(s, n, puzzle, colored)
+        _solve_lazy(s, colored, puzzle, n)
+    return _solve(s, colored, puzzle, n)
 
 
 def qf_ia(s: Solver, colored: list, puzzle: list, n: int) -> None:
     z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, n)
-    z3solver_base.connectivity_ranking(s, colored, n)
+    z3solver_base.neighbours(s, colored, puzzle, n)
+    z3solver_base.connectivity_ranking(s, colored, puzzle, n)
 
 
 def qf_ia_alt_u(s: Solver, colored: list, puzzle: list, n: int) -> None:
     z3solver_base.uniqueness_atmost(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, n)
-    z3solver_base.connectivity_ranking(s, colored, n)
+    z3solver_base.neighbours(s, colored, puzzle, n)
+    z3solver_base.connectivity_ranking(s, colored, puzzle, n)
 
 
 def qf_ia_alt_c(s: Solver, colored: list, puzzle: list, n: int) -> None:
     z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, n)
-    z3solver_base.connectivity_ranking_alt(s, colored, n)
+    z3solver_base.neighbours(s, colored, puzzle, n)
+    z3solver_base.connectivity_ranking_alt(s, colored, puzzle, n)
 
 
 def qf_ia_tree_c(s: Solver, colored: list, puzzle: list, n: int) -> None:
     z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, n)
-    z3solver_base.connectivity_tree(s, colored, n)
+    z3solver_base.neighbours(s, colored, puzzle, n)
+    z3solver_base.connectivity_tree(s, colored, puzzle, n)
 
 
 def qf_bv(s: Solver, colored: list, puzzle: list, n: int) -> None:
     z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, n)
-    z3solver_base.connectivity_bitvector(s, colored, n)
+    z3solver_base.neighbours(s, colored, puzzle, n)
+    z3solver_base.connectivity_bitvector(s, colored, puzzle, n)
 
 
 def boolean(s: Solver, colored: list, puzzle: list, n: int) -> None:
     z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, n)
-    z3solver_base.connectivity_boolean(s, colored, n)
+    z3solver_base.neighbours(s, colored, puzzle, n)
+    z3solver_base.connectivity_boolean(s, colored, puzzle, n)
 
 
 def lazy(s: Solver, colored: list, puzzle: list, n: int) -> None:
     z3solver_base.uniqueness_pairs(s, colored, puzzle, n)
-    z3solver_base.neighbours(s, colored, n)
+    z3solver_base.neighbours(s, colored, puzzle, n)
