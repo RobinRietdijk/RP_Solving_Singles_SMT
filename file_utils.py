@@ -151,8 +151,17 @@ def append_dict(path: str, new_dict: dict) -> None:
             continue
     
     data.update(new_dict)
+    to_pop = []
+    for key in data.keys():
+        if key not in new_dict.keys():
+            to_pop.append(key)
+    for key in to_pop:        
+        data.pop(key, None)
+
+    if not header[len(header)-1].endswith("\n"):
+        header.append("\n")
     comments = [l for l in comments if not l.strip().startswith("# ~[")]
-    if comments and comments[-1].strip() != "":
+    if len(comments) > 0 and not comments[len(comments)-1].endswith("\n"):
         comments.append("\n")
     comments.extend([f"# ~[{k}]: {repr(v)}\n" for k, v in data.items()])
 
