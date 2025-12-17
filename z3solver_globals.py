@@ -1,38 +1,73 @@
 from z3 import * # type: ignore
 
-# Redundant constraint to make sure there is at least n / 2 in each row and column
 def least_whites(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    """ Makes sure there is at least n/2 white cells in each row and column
+
+    Args:
+        s (Solver): Solver to add assertions to
+        colored (list): Matrix of BoolRef values for solver to fill
+        puzzle (list): Matrix of Integers representing the number grid of the puzzle instance
+        n (int): Size of the puzzle
+        encoding_size (dict): Variable counts for this encoding
+    """
     min_white = n//2
     for i in range(n):
         s.add(AtLeast(*[Not(colored[i][j]) for j in range(n)], min_white))
         s.add(AtLeast(*[Not(colored[j][i]) for j in range(n)], min_white))
 
-# Redundant constraint to make sure there is at most (n / 2) + 1 blacks in each row and column
 def most_blacks(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    """ Makes sure there is at most (n/2)+1 colored cells in each row and column
+
+    Args:
+        s (Solver): Solver to add assertions to
+        colored (list): Matrix of BoolRef values for solver to fill
+        puzzle (list): Matrix of Integers representing the number grid of the puzzle instance
+        n (int): Size of the puzzle
+        encoding_size (dict): Variable counts for this encoding
+    """
     max_black = (n//2)+1
     for i in range(n):
         s.add(AtMost(*[colored[i][j] for j in range(n)], max_black))
         s.add(AtMost(*[colored[j][i] for j in range(n)], max_black))
 
-# Redundant constraint for pairs, making all other occurences of those values black
 def pair_isolation(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    """ If a pair of equal adjacent numbers exist in a row or column, all other occurences of that number must be colored
+
+    Args:
+        s (Solver): Solver to add assertions to
+        colored (list): Matrix of BoolRef values for solver to fill
+        puzzle (list): Matrix of Integers representing the number grid of the puzzle instance
+        n (int): Size of the puzzle
+        encoding_size (dict): Variable counts for this encoding
+    """
     if n < 4:
         return
     
     for i in range(n):
         for j in range(n-1):
+            # Rows
             if puzzle[i][j] == puzzle[i][j+1]:
                 for k in range(n):
                     if k not in (j-1, j, j+1, j+2) and puzzle[i][j] == puzzle[i][k]:
                         s.add(colored[i][k])
-            
+            # Columns
             if puzzle[j][i] == puzzle[j+1][i]:
                 for k in range(n):
                     if k not in (j-1, j, j+1, j+2) and puzzle[j][i] == puzzle[k][i]:
                         s.add(colored[k][i])
 
-# Implementation of pattern 7 according to chapter 3.3 of Hitori Solver
 def close_isolation(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    """ If a pair of equal numbers threatens to close of a white cell, all other occurences of that number must be colored
+
+    Args:
+        s (Solver): Solver to add assertions to
+        colored (list): Matrix of BoolRef values for solver to fill
+        puzzle (list): Matrix of Integers representing the number grid of the puzzle instance
+        n (int): Size of the puzzle
+        encoding_size (dict): Variable counts for this encoding
+    """
+    
+    # For all rows
     for i in range(n):
         for j in range(n-2):
             if puzzle[i][j] == puzzle[i][j+2]:
@@ -50,6 +85,7 @@ def close_isolation(s: Solver, colored: list, puzzle: list, n: int, encoding_siz
                     if k not in (j, j+2) and puzzle[i][k] == puzzle[i][j]:
                         s.add(Implies(condition, colored[i][k]))
 
+    # For all columns
     for j in range(n):
         for i in range(n-2):
             if puzzle[i][j] == puzzle[i+2][j]:
@@ -68,6 +104,15 @@ def close_isolation(s: Solver, colored: list, puzzle: list, n: int, encoding_siz
                         s.add(Implies(condition, colored[k][j]))
 
 def white_bridges(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) -> None:
+    """ All pairs of adjacent rows and columns must have at least two adjacent white cells
+
+    Args:
+        s (Solver): Solver to add assertions to
+        colored (list): Matrix of BoolRef values for solver to fill
+        puzzle (list): Matrix of Integers representing the number grid of the puzzle instance
+        n (int): Size of the puzzle
+        encoding_size (dict): Variable counts for this encoding
+    """
     for i in range(n-1):
         whites_in_row1 = Or(*[Not(colored[i][j]) for j in range(n)])
         whites_in_row2 = Or(*[Not(colored[i+1][j]) for j in range(n)])
