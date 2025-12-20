@@ -1,6 +1,7 @@
 import os
 import sys
 import ast
+import csv
 
 PUZZLE_EXTENSIONS = [".singles"]
 SOLUTION_EXTENSIONS = [".singlessol"]
@@ -81,6 +82,43 @@ def _read_dir(path: str, puzzles: bool, strict: bool, recursive: bool) -> list:
 
         grids.extend(_read_file(file, puzzles, strict))
     return grids
+
+def _flatten_dict(d, parent_key="", sep="."):
+    items = {}
+    for key, value in d.items():
+        new_key = f"{parent_key}{sep}{key}" if parent_key else key
+        if isinstance(value, dict):
+            items.update(_flatten_dict(value, new_key, sep))
+        else:
+            items[new_key] = value
+    return items
+
+def _unflatten_dict(d, sep="."):
+    result = {}
+    for key, value in d.items():
+        if value in ("", None):
+            continue
+
+        parts = key.split(sep)
+        current = result
+        for p in parts[:-1]:
+            current = current.setdefault(p, {})
+        current[parts[-1]] = value
+    return result
+
+def _cast(value):
+    if value is None or value == "":
+        return None
+    try:
+        i = int(value)
+        if str(i) == value:
+            return i
+    except:
+        pass
+    try:
+        return float(value)
+    except:
+        return value
 
 def read_puzzle(path: str, strict: bool) -> tuple[str, list, str]:
     result = _read_file(path, True, strict)
@@ -167,4 +205,41 @@ def append_dict(path: str, new_dict: dict) -> None:
 
     with open(path, "w") as file:
         file.writelines(header+comments)
-        
+
+def write_csv(results: dict, out_dir: str) -> None:
+    os.makedirs(out_dir, exist_ok=True)
+    by_solver = {}
+    for r in results:
+        by_solver.setdefault(r["solver"], []).append(r)
+
+    for solver, solver_results in by_solver.items():
+        out_path = os.path.join(out_dir, f"{solver}.csv")
+
+        flat_rows = []
+        fieldnames = set()
+
+        for r in solver_results:
+            flat = _flatten_dict(r)
+            flat_rows.append(flat)
+            fieldnames.update(flat.keys())
+
+        fieldnames = sorted(fieldnames)
+
+        with open(out_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for flat in flat_rows:
+                writer.writerow(flat)
+
+def read_csv(path: str) -> dict:
+    if not os.path.exists(path):
+        sys.exit(f"Error: File does not exist at {path}")
+
+    results = []
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            casted = {key: _cast(value) for key, value in row.items()}
+            results.append(_unflatten_dict(casted))
+
+    return results
