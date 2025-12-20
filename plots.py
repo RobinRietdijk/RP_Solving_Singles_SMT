@@ -1,6 +1,8 @@
 import os
 import matplotlib.pyplot as plt
 import scienceplots
+import scipy
+import numpy as np
 
 plt.style.use(['science','ieee'])
 
@@ -43,53 +45,27 @@ plt.rcParams["axes.prop_cycle"] = plt.cycler(color=[ # type: ignore
 
 LINE_STYLES = ["-", "--", "-.", ":"]
 
-def _plot_puzzleruntime(results: dict) -> None:
-    by_size = {}
+def _log_differences(results: list, statistic, solver1: str, solver2: str, size: int) -> list:
+    a = {}
+    b = {}
+
     for r in results:
-        size = r["size"]
-        if size not in by_size:
-            by_size[size] = []
-        by_size[r["size"]].append(r)
+        if r["size"] == size:
+            if r["solver"] == solver1:
+                a[r["puzzle"]] = r["statistics"][statistic]
+            elif r["solver"] == solver2:
+                b[r["puzzle"]] = r["statistics"][statistic]
 
-    solver_order = []
-    for r in results:
-        s = r["solver"]
-        if s not in solver_order:
-            solver_order.append(s)
+    common = sorted(set(a) & set(b))
+    differences = [a[puzzle]-b[puzzle] for puzzle in common]
+    return differences
 
-    for size, entries in by_size.items():
-        puzzles = sorted({e["puzzle"] for e in entries})
-        x = list(range(len(puzzles)))
+def plot_qq(results: list, statistic, solver1: str, solver2: str, size: int) -> None:
+    differences = _log_differences(results, statistic, solver1, solver2, size)
 
-        by_solver = {}
-        for e in entries:
-            solver = e["solver"]
-            if solver not in by_solver:
-                by_solver[solver] = {}
-            by_solver[solver][e["puzzle"]] = e["elapsed"]
-
-        plt.figure()
-        for index, solver in enumerate(solver_order):
-            if solver not in by_solver:
-                continue
-            puzzle_map = by_solver[solver]
-
-            ys = [puzzle_map.get(p, float("nan")) for p in puzzles]
-            z = 10 + (len(solver_order)-index)
-            plt.plot(x, ys, marker=".", linestyle=LINE_STYLES[index % len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
-
-        plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
-        plt.xticks(x)
-        plt.xlabel("Puzzle index")
-        plt.ylabel("Runtime (s)")
-        plt.title(f"Runtime per puzzle for size {size}x{size}")
-        plt.legend()
-        plt.tight_layout()
-
-        out_path = os.path.join(os.path.abspath("plots"), f"runtime_n{size}.png")
-        plt.savefig(out_path)
-        plt.close()
-        print(f"Saved {out_path}")
+    scipy.stats.probplot(differences, plot=plt)
+    plt.title("Q–Q plot of paired log-runtime differences")
+    plt.show()
 
 def _plot_puzzlestatistic(results: dict, statistic: str, y_label: str) -> None:
     by_size = {}
@@ -140,62 +116,6 @@ def _plot_puzzlestatistic(results: dict, statistic: str, y_label: str) -> None:
         plt.close()
         print(f"Saved {out_path}")
 
-def _plot_puzzleconflicts(results: dict) -> None:
-    _plot_puzzlestatistic(results, "conflicts", "Conflicts")
-def _plot_puzzlepropagations(results: dict) -> None:
-    _plot_puzzlestatistic(results, "propagations", "Propagations")
-def _plot_puzzledecisions(results: dict) -> None:
-    _plot_puzzlestatistic(results, "decisions", "Decisions")
-def _plot_puzzleboolvars(results: dict) -> None:
-    _plot_puzzlestatistic(results, "bool_vars", "Boolean variables")
-def _plot_puzzleclauses(results: dict) -> None:
-    _plot_puzzlestatistic(results, "clauses", "Clauses")
-def _plot_puzzlebinclauses(results: dict) -> None:
-    _plot_puzzlestatistic(results, "bin_clauses", "Binary clauses")
-    
-def _plot_avgruntime(results: dict) -> None:
-    sums = {}
-    counts = {}
-
-    for r in results:
-        key = (r["size"], r["solver"])
-        if key not in sums:
-            sums[key] = 0.0
-            counts[key] = 0
-        sums[key] += r["elapsed"]
-        counts[key] += 1
-
-    sizes = sorted({size for (size, _) in sums.keys()})
-    solvers = sorted({solver for (_, solver) in sums.keys()})
-
-    for size in sizes:
-        avg_per_solver = []
-        solver_labels = []
-        for solver in solvers:
-            key = (size, solver)
-            if key in sums:
-                avg = sums[key] / counts[key]
-                avg_per_solver.append(avg)
-                solver_labels.append(solver)
-        
-        if not avg_per_solver:
-            continue
-
-        plt.figure()
-        x = list(range(len(solver_labels)))
-        plt.bar(x, avg_per_solver)
-        plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
-        plt.xticks(x, solver_labels, rotation=45, ha='right')
-        plt.xlabel("Solver")
-        plt.ylabel("Average runtime (s)")
-        plt.title(f"Average runtime per solver for size {size}x{size}")
-        plt.tight_layout()
-        
-        out_path = os.path.join(os.path.abspath("plots"), f"avg_runtime_n{size}.png")
-        plt.savefig(out_path)
-        plt.close()
-        print(f"Saved {out_path}")
-
 def _plot_avgstatistic(results: dict, statistic: str, y_label: str) -> None:
     sums = {}
     counts = {}
@@ -239,60 +159,6 @@ def _plot_avgstatistic(results: dict, statistic: str, y_label: str) -> None:
         plt.close()
         print(f"Saved {out_path}")
 
-def _plot_avgconflicts(results: dict) -> None:
-    _plot_avgstatistic(results, "conflicts", "Averge conflicts")
-def _plot_avgpropagations(results: dict) -> None:
-    _plot_avgstatistic(results, "propagations", "Averge propagations")
-def _plot_avgdecisions(results: dict) -> None:
-    _plot_avgstatistic(results, "decisions", "Averge decisions")
-def _plot_avgboolvars(results: dict) -> None:
-    _plot_avgstatistic(results, "bool_vars", "Averge Boolean variables")
-def _plot_avgclauses(results: dict) -> None:
-    _plot_avgstatistic(results, "clauses", "Averge clauses")
-def _plot_avgbinclauses(results: dict) -> None:
-    _plot_avgstatistic(results, "bin_clauses", "Averge binary clauses")
-
-def _plot_scalingavgruntime(results: dict) -> None:
-    sums = {}
-    counts = {}
-
-    for r in results:
-        key = (r["size"], r["solver"])
-        if key not in sums:
-            sums[key] = 0.0
-            counts[key] = 0
-        sums[key] += r["elapsed"]
-        counts[key] += 1
-
-    sizes = sorted({size for (size, _) in sums.keys()})
-    solvers = sorted({solver for (_, solver) in sums.keys()})
-
-    plt.figure()
-    for index, solver in enumerate(solvers):
-        z = 10 + (len(solvers)-index)
-        x_sizes = []
-        y_avgs = []
-        for size in sizes:
-            key = (size, solver)
-            if key in sums:
-                avg = sums[key] / counts[key]
-                x_sizes.append(size)
-                y_avgs.append(avg)
-        if x_sizes:
-            plt.plot(x_sizes, y_avgs, marker=".", linestyle=LINE_STYLES[index % len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
-
-    plt.legend(markerscale=0.5, handlelength=1.2, borderpad=0.2, labelspacing=0.2)
-    plt.xlabel("Puzzle size n (n x n)")
-    plt.ylabel("Average runtime (s)")
-    plt.title("Average runtime by puzzle size")
-    plt.legend()
-    plt.tight_layout()
-
-    out_path = os.path.join(os.path.abspath("plots"), f"scaling_avg_runtime.png")
-    plt.savefig(out_path)
-    plt.close()
-    print(f"Saved {out_path}")
-
 def _plot_scalingavgstatistic(results: dict, statistic: str, y_label: str, plot_name: str) -> None:
     sums = {}
     counts = {}
@@ -310,7 +176,7 @@ def _plot_scalingavgstatistic(results: dict, statistic: str, y_label: str, plot_
 
     plt.figure()
     for index, solver in enumerate(solvers):
-        z = 10 + (len(solver)-index)
+        z = 10 + (len(solvers)-index)
         x_sizes = []
         y_avgs = []
         for size in sizes:
@@ -334,211 +200,69 @@ def _plot_scalingavgstatistic(results: dict, statistic: str, y_label: str, plot_
     plt.close()
     print(f"Saved {out_path}")
 
-def _plot_scalingavgconflicts(results: dict) -> None:
-    _plot_scalingavgstatistic(results, "conflicts", "Average number of conflicts", "Average number of conflicts by puzzle size")
-def _plot_scalingavgpropagations(results: dict) -> None:
-    _plot_scalingavgstatistic(results, "propagations", "Average number of propagations", "Average number of propagations by puzzle size")
-def _plot_scalingavgdecisions(results: dict) -> None:
-    _plot_scalingavgstatistic(results, "decisions", "Average number of decisions", "Average number of decisions by puzzle size")
-def _plot_scalingavgboolvars(results: dict) -> None:
-    _plot_scalingavgstatistic(results, "bool_vars", "Average number of Boolean variables", "Average encoding size by puzzle size (bool_vars)")
-def _plot_scalingavgclauses(results: dict) -> None:
-    _plot_scalingavgstatistic(results, "clauses", "Average number of clauses", "Average encoding size by puzzle size (clauses)")
-def _plot_scalingavgbinclauses(results: dict) -> None:
-    _plot_scalingavgstatistic(results, "bin_clauses", "Average number of binary clauses", "Average encoding size by puzzle size (bin_clauses)")
-
 PLOT_TYPES = {
     1: {
-        "f": _plot_puzzleruntime,
-        "description": "Runtime vs puzzle (per size, line plot, one line per solver)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_puzzlestatistic,
+        "args": ["runtime", "Runtime"]
     },
     1_1: {
-        "f": _plot_puzzleconflicts,
-        "description": "Conflict vs puzzle (per size, line plot, one line per solver)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_puzzlestatistic,
+        "args": ["conflicts", "Conflicts"]
     },
     1_2: {
-        "f": _plot_puzzledecisions,
-        "description": "Decisions vs puzzle (per size, line plot, one line per solver)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_puzzlestatistic,
+        "args": ["propagations", "Propagations"]
     },
     1_3: {
-        "f": _plot_puzzlepropagations,
-        "description": "Propagations vs puzzle (per size, line plot, one line per solver)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    1_4: {
-        "f": _plot_puzzleboolvars,
-        "description": "Boolean variables vs puzzle (per size, line plot, one line per solver)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    1_5: {
-        "f": _plot_puzzleclauses,
-        "description": "Clauses vs puzzle (per size, line plot, one line per solver)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    1_6: {
-        "f": _plot_puzzlebinclauses,
-        "description": "Binary clauses vs puzzle (per size, line plot, one line per solver)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_puzzlestatistic,
+        "args": ["decisions", "Decisions"]
     },
     2: {
-        "f": _plot_avgruntime,
-        "description": "Average runtime per solver and size (bar chart)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_avgstatistic,
+        "args": ["runtime", "Averge runtime"]
     },
     2_1: {
-        "f": _plot_avgconflicts,
-        "description": "Average conflicts per solver and size (bar chart)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_avgstatistic,
+        "args": ["conflicts", "Averge conflicts"]
     },
     2_2: {
-        "f": _plot_avgpropagations,
-        "description": "Average propagations per solver and size (bar chart)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_avgstatistic,
+        "args": ["propagations", "Averge propagations"]
     },
     2_3: {
-        "f": _plot_avgdecisions,
-        "description": "Average decisions per solver and size (bar chart)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    2_4: {
-        "f": _plot_avgboolvars,
-        "description": "Average Boolean variables per solver and size (bar chart)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    2_5: {
-        "f": _plot_avgclauses,
-        "description": "Average clauses per solver and size (bar chart)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    2_6: {
-        "f": _plot_avgbinclauses,
-        "description": "Average binary clauses per solver and size (bar chart)",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_avgstatistic,
+        "args": ["decisions", "Averge decisions"]
     },
     3: {
-        "f": _plot_scalingavgruntime,
-        "description": "Average runtime by puzzle size",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_scalingavgstatistic,
+        "args": ["runtime", "Average runtime", "Average runtime by puzzle size"]
     },
     3_1: {
-        "f": _plot_scalingavgconflicts,
-        "description": "Average conflicts by puzzle size",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_scalingavgstatistic,
+        "args": ["conflicts", "Average number of conflicts", "Average number of conflicts by puzzle size"]
     },
     3_2: {
-        "f": _plot_scalingavgpropagations,
-        "description": "Average propagations by puzzle size",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_scalingavgstatistic,
+        "args": ["propagations", "Average number of propagations", "Average number of propagations by puzzle size"]
     },
     3_3: {
-        "f": _plot_scalingavgdecisions,
-        "description": "Average decisions by puzzle size",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    3_4: {
-        "f": _plot_scalingavgboolvars,
-        "description": "Average Boolean variables by puzzle size",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    3_5: {
-        "f": _plot_scalingavgclauses,
-        "description": "Average clauses by puzzle size",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
-    },
-    3_6: {
-        "f": _plot_scalingavgbinclauses,
-        "description": "Average binary clauses by puzzle size",
-        "requires": {
-            "min_puzzles": 1,
-            "min_solvers": 1
-        }
+        "f": _plot_scalingavgstatistic,
+        "args": ["decisions", "Average number of decisions", "Average number of decisions by puzzle size"]
     }
 }
 
-def plot(id: int, results: list) -> None:
+def plot_stat(id: int, results: list) -> None:
     if id not in PLOT_TYPES:
         print(f"Unknown plot id {id}")
         return
     
     meta = PLOT_TYPES[id]
     f = meta["f"]
-    req = meta["requires"]
+    args = meta["args"]
 
     puzzle_set = {r["puzzle"] for r in results}
     solver_set = {r["solver"] for r in results}
-
-    min_puzzles = req.get("min_puzzles", 1)
-    min_solvers = req.get("min_solvers", 1)
-    if len(puzzle_set) < min_puzzles:
-        print(f"Plot {id} requires at least {min_puzzles} puzzle(s)")
-        return
-    if len(solver_set) < min_solvers:
-        print(f"Plot {id} requires at least {min_solvers} solver(s)")
-        return
     
     os.makedirs(os.path.abspath("plots"), exist_ok=True)
     print(f"Generating plot {id}: {meta['description']}")
-    f(results)
+    f(results, *args)
