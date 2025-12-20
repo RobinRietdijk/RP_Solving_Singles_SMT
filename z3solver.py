@@ -102,17 +102,12 @@ def _solve(s: Solver, colored: list, puzzle: list, n: int, encoding_size: dict) 
     st = s.statistics()
     encoding_size["assertions"] = len(s.assertions())
     solver_statistics = {
-        "restarts": st.get_key_value("restarts") if "restarts" in st.keys() else 0,
         "propagations": st.get_key_value("propagations") if "propagations" in st.keys() else 0,
         "rlimit_count": st.get_key_value("rlimit count") if "rlimit count" in st.keys() else 0,
-        "bool_vars": st.get_key_value("mk bool var") if "mk bool var" in st.keys() else 0,
-        "clauses": st.get_key_value("mk clause") if "mk clause" in st.keys() else 0,
-        "bin_clauses": st.get_key_value("mk clause binary") if "mk clause binary" in st.keys() else 0,
         "conflicts": st.get_key_value("conflicts") if "conflicts" in st.keys() else 0,
         "decisions": st.get_key_value("decisions") if "decisions" in st.keys() else 0,
         "memory": st.get_key_value("memory") if "memory" in st.keys() else 0,
         "max_memory": st.get_key_value("max memory") if "max memory" in st.keys() else 0,
-        "time": st.get_key_value("time") if "time" in st.keys() else 0,
         "encoding_size": encoding_size
     }
 
@@ -138,20 +133,16 @@ def _solve_lazy(s: Solver, colored: list, puzzle: list, n: int, encoding_size: d
     # Keep looping until a solution is found that satisfies the connectivity constraints as well as all other constraints added to the solver
     while True:
         # Solver timed out
-        if start + time.perf_counter() >= TIMEOUT:
+        if time.perf_counter()-start >= TIMEOUT/1000:
             st = s.statistics()
             encoding_size["assertions"] = len(s.assertions())
             solver_statistics = {
                 "propagations": st.get_key_value("propagations") if "propagations" in st.keys() else 0,
                 "rlimit": st.get_key_value("rlimit count") if "rlimit count" in st.keys() else 0,
-                "bool_vars": st.get_key_value("mk bool var") if "mk bool var" in st.keys() else 0,
-                "clauses": st.get_key_value("mk clause") if "mk clause" in st.keys() else 0,
-                "bin_clauses": st.get_key_value("mk clause binary") if "mk clause binary" in st.keys() else 0,
                 "conflicts": st.get_key_value("conflicts") if "conflicts" in st.keys() else 0,
                 "decisions": st.get_key_value("decisions") if "decisions" in st.keys() else 0,
                 "memory": st.get_key_value("memory") if "memory" in st.keys() else 0,
                 "max_memory": st.get_key_value("max memory") if "max memory" in st.keys() else 0,
-                "time": st.get_key_value("time") if "time" in st.keys() else 0,
                 "encoding_size": encoding_size
             }
             
