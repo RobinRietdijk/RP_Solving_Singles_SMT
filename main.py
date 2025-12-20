@@ -6,17 +6,22 @@ import hashlib
 import shutil
 import z3solver_locals
 import z3solver_globals
+import rq1
+import plots
 from datetime import datetime
-from file_utils import read_puzzle, read_puzzle_dir, read_solution, read_solution_dir, write_file, append_comment, append_dict
+from file_utils import read_puzzle, read_puzzle_dir, read_solution, read_solution_dir, write_file, append_comment, append_dict, write_csv,read_csv
 from analysis import find_difficult, print_outlying_puzzles, analyze_puzzle_statistics, analyze_sets
 from utils import format_elapsed
-from plots import PLOT_TYPES, plot
 from checker import check_puzzle
 
 # Default path to the puzzle folder
 PUZZLES_FOLDER = os.path.abspath("puzzles")
 # Default path to the solutions folder
 SOLUTIONS_FOLDER = os.path.abspath("solutions")
+# Default path to the csv folder
+CSV_FOLDER = os.path.abspath("csvs")
+# Options for the analysis command
+ANALYSIS_OPTIONS = ["write_csv", "difficulty", "rq1", "rq2"]
 # Multiplier for solver that triggered a timeout
 PAR_MULTIPLIER = 2
 
@@ -85,7 +90,7 @@ def _read_files(file: str|list, folder: str|list, recursive: bool, strict: bool,
     return results
 
 
-def _run_solver(solver: dict, puzzle: list, seed: int|None = None) -> tuple[list|None, dict|None, dict|None, float]:
+def _run_solver(solver: dict, puzzle: list, seed: int|None = None) -> tuple[list|None, dict, dict|None]:
     """ Helper function to run the solver on a puzzle
 
     Args:
@@ -103,10 +108,11 @@ def _run_solver(solver: dict, puzzle: list, seed: int|None = None) -> tuple[list
 
     if timed_out:
         # Add a penalty to the runtime if the solver timed out
-        elapsed = z3solver.TIMEOUT*PAR_MULTIPLIER
+        elapsed = (z3solver.TIMEOUT/1000)*PAR_MULTIPLIER
     else:
         elapsed = end-start
-    return solution, solver_statistics, puzzle_statistics, elapsed
+    solver_statistics["runtime"] = elapsed
+    return solution, solver_statistics, puzzle_statistics
 
 
 def _check_command(args: dict) -> None:
@@ -152,13 +158,13 @@ def _solve_command(args: dict) -> None:
         best_solver = None
 
         for solver in args.solvers:
-            solution, solver_statistics, puzzle_statistics, elapsed = _run_solver(solver, puzzle)
+            solution, solver_statistics, puzzle_statistics = _run_solver(solver, puzzle)
+            elapsed = solver_statistics["runtime"]
             print(f"{'Solved' if elapsed < z3solver.TIMEOUT*PAR_MULTIPLIER else 'Timed out'} {fname} ({n}x{n}): time= {format_elapsed(elapsed)}")
             results.append({
                 "puzzle": fname,
                 "size": n,
                 "solver": solver["name"],
-                "elapsed": elapsed,
                 "statistics": solver_statistics,
                 "puzzle_statistics": puzzle_statistics
             })
@@ -201,44 +207,35 @@ def _solve_command(args: dict) -> None:
         else:
             args_plot = args.plot if isinstance(args.plot, list) else [args.plot]
             for plt in args_plot:
-                plot(plt, results)
+                plots.plot_stat(plt, results)
 
 
 def _gather_satistics(run: int, path: str, puzzle: list, seed: int, solver: dict) -> dict:
     fname = os.path.splitext(os.path.basename(path))[0]
     n = len(puzzle)
 
-    _, solver_statistics, puzzle_statistics, elapsed = _run_solver(solver, puzzle, seed)
-    print(f"[Run: {run+1}] {'Solved' if elapsed < z3solver.TIMEOUT*PAR_MULTIPLIER else 'Timed out'} {fname} ({n}x{n}): " \
-            f"time= {format_elapsed(elapsed)}")
+    _, solver_statistics, puzzle_statistics = _run_solver(solver, puzzle, seed)
+    print(f"[Run: {run+1}] {'Solved' if solver_statistics["runtime"] < z3solver.TIMEOUT*PAR_MULTIPLIER else 'Timed out'} {fname} ({n}x{n}): " \
+            f"time= {format_elapsed(solver_statistics["runtime"])}")
     
     return {"run": run,
         "puzzle": fname,
         "path": path,
         "size": n,
         "solver": solver["name"],
-        "elapsed": elapsed,
+        "seed": seed,
         "statistics": solver_statistics,
         "puzzle_statistics": puzzle_statistics
     }
 
 
-def _analyze_difficulty_command(args: dict) -> None:
-    """ Command to analyze the difficulty of puzzles. Invoked through the CLI
+def _analyze_difficulty(args: dict, results: list) -> None:
+    """ Command to analyze the puzzle difficulty for the solver.
 
     Args:
         args (dict): CLI arguments given for this command
+        results (list): Results from the solver runs
     """
-    puzzles = _read_files(args.file, args.folder, args.recursive, args.strict, True)
-    
-    results = []
-    for run in range(args.runs):
-        # Generate a reproducable seed to be used for all solvers in this run
-        seed = int(hashlib.sha256("|".join(map(str, [run, args.runs, len(puzzles), len(args.solvers)])).encode()).hexdigest()[:8], 16)
-        for path, puzzle, _ in puzzles:
-            for solver in args.solvers:
-                results.append(_gather_satistics(run, path, puzzle, seed, solver))
-    
     hard, easy = find_difficult(results, args.hard_threshold, args.easy_threshold, args.print)
 
     # Filter hard and easy puzzles to a seperate folder
@@ -293,6 +290,47 @@ def _analyze_difficulty_command(args: dict) -> None:
             copy_list(easy.get(solver, []), os.path.join(solver_dir, "easy"))
 
 
+def _analyze_command(args: dict) -> None:
+    """ Command to analyze certain properties of the solver. Invoked through the CLI
+
+    Args:
+        args (dict): CLI arguments given for this command
+    """
+    if not args.csv:
+        puzzles = _read_files(args.file, args.folder, args.recursive, args.strict, True)
+    
+    results = []
+    if args.csv:
+        if isinstance(args.csv, list):
+            paths = args.csv
+        else:
+            paths = [args.csv]
+        for path in paths:
+            results.extend(read_csv(path))
+    else:
+        for run in range(args.runs):
+            # Generate a reproducable seed to be used for all solvers in this run
+            seed = int(hashlib.sha256("|".join(map(str, [run, args.runs, len(puzzles), len(args.solvers)])).encode()).hexdigest()[:8], 16)
+            for path, puzzle, _ in puzzles:
+                for solver in args.solvers:
+                    # Generate a sub seed based on the general seed
+                    sub_seed = int(hashlib.sha256("|".join(map(str, [seed, puzzle, solver])).encode()).hexdigest()[:8], 16)
+                    result = _gather_satistics(run, path, puzzle, sub_seed, solver)
+                    results.append(result)
+    
+    if args.analysis == "difficulty":
+        _analyze_difficulty(args, results)
+    if args.analysis == "rq1":
+        rq1.plot_encoding_scaling(results, [solver["name"] for solver in args.solvers])
+        rq1.plot_runtime_vs_size(results, [solver["name"] for solver in args.solvers])
+        rq1.print_rq1_text_stats(results, report_sizes=[15, 25])
+        rq1.print_encoding_text_stats(results, report_sizes=[10, 25])
+    if args.analysis == "rq2":
+        return
+    if args.analysis =="write_csv":
+        write_csv(results, CSV_FOLDER)
+
+
 def _analyze_puzzle_properties_command(args: dict) -> None:
     """ Command for analyzing puzzle properties. Invoked through the CLI
 
@@ -300,7 +338,6 @@ def _analyze_puzzle_properties_command(args: dict) -> None:
         args (dict): CLI arguments given for this command
     """
     puzzles = _read_files(args.file, args.folder, args.recursive, args.strict, True)
-    print(len(puzzles))
     puzzle_statistics = analyze_puzzle_statistics(puzzles)
     if args.z_value:
         print_outlying_puzzles(args.z_value, puzzle_statistics)
@@ -372,7 +409,7 @@ if __name__ == "__main__":
     solve_parser.add_argument("-r", "--recursive", action="store_true", help="Recursively read subfolders")
     solve_parser.add_argument("-s", "--strict", action="store_true", help="Exit when wrong file type is found")
     solve_parser.add_argument("-w", "--write", action="store_true", help="Write to file")
-    solve_parser.add_argument("-p", "--plot", action="append", type=int, choices=PLOT_TYPES.keys(), help="Generate a specific plot type")
+    solve_parser.add_argument("-p", "--plot", action="append", type=int, choices=plots.PLOT_TYPES.keys(), help="Generate a specific plot type")
     solve_parser.add_argument("solvers", nargs="+", type=_parse_solver_specs, help="One or more solver variants to run")
     solve_parser.set_defaults(func=_solve_command)
 
@@ -387,19 +424,21 @@ if __name__ == "__main__":
     check_parser.set_defaults(func=_check_command)
 
     # Command for analyzing difficulty
-    analyze_difficulty_parser = subparsers.add_parser("analyze_difficulty", help="Analyze puzzle difficulty using the SMT solver")
-    group_analyze_difficulty = analyze_difficulty_parser.add_mutually_exclusive_group(required=True)
-    group_analyze_difficulty.add_argument("-f", "--file", action="append", type=str, help="Path to a puzzle file")
-    group_analyze_difficulty.add_argument("-d", "--folder", action="append", type=str, help="Path to folder containing puzzle files")
-    analyze_difficulty_parser.add_argument("-r", "--recursive", action="store_true", help="Recursively read subfolders")
-    analyze_difficulty_parser.add_argument("-s", "--strict", action="store_true", help="Exit when wrong file type is found")
-    analyze_difficulty_parser.add_argument("-i", "--runs", default=1, type=int, help="Number of runs to complete")
-    analyze_difficulty_parser.add_argument("-th", "--hard_threshold", default=3.0, type=float, help="Threshold for hard difficulty score")
-    analyze_difficulty_parser.add_argument("-te", "--easy_threshold", default=3.0, type=float, help="Threshold for easy difficulty score")
-    analyze_difficulty_parser.add_argument("-p", "--print", action="store_true", help="Print difficult puzzles to terminal")
-    analyze_difficulty_parser.add_argument("-c", "--copy", type=str, help="Copy difficult puzzles to new relative folder")
-    analyze_difficulty_parser.add_argument("solvers", nargs="+", type=_parse_solver_specs, help="Solver(s) used to run analysis")
-    analyze_difficulty_parser.set_defaults(func=_analyze_difficulty_command)
+    analyze_parser = subparsers.add_parser("analyze", help="Analyze puzzle difficulty using the SMT solver")
+    analyze_parser.add_argument("analysis", choices=ANALYSIS_OPTIONS, help="Analysis mode")
+    group_analyze = analyze_parser.add_mutually_exclusive_group(required=True)
+    group_analyze.add_argument("-f", "--file", action="append", type=str, help="Path to a puzzle file")
+    group_analyze.add_argument("-d", "--folder", action="append", type=str, help="Path to folder containing puzzle files")
+    group_analyze.add_argument("-e", "--csv", action="append", type=str, help="Path to csv file")
+    analyze_parser.add_argument("-r", "--recursive", action="store_true", help="Recursively read subfolders")
+    analyze_parser.add_argument("-s", "--strict", action="store_true", help="Exit when wrong file type is found")
+    analyze_parser.add_argument("-i", "--runs", default=1, type=int, help="Number of runs to complete")
+    analyze_parser.add_argument("-th", "--hard_threshold", default=3.0, type=float, help="Threshold for hard difficulty score")
+    analyze_parser.add_argument("-te", "--easy_threshold", default=3.0, type=float, help="Threshold for easy difficulty score")
+    analyze_parser.add_argument("-p", "--print", action="store_true", help="Print difficult puzzles to terminal")
+    analyze_parser.add_argument("-c", "--copy", type=str, help="Copy difficult puzzles to new relative folder")
+    analyze_parser.add_argument("solvers", nargs="+", type=_parse_solver_specs, help="Solver(s) used to run analysis")
+    analyze_parser.set_defaults(func=_analyze_command)
 
     # Command for analyzing puzzle properties
     analyze_puzzle_properties_parser = subparsers.add_parser("analyze_puzzle_properties", help="Analyze puzzles for patterns and properties")
