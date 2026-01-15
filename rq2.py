@@ -7,6 +7,14 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.patches as patches
 
 def _flatten_results(results: list) -> list:
+    """ Flattens the results from multiple runs into a single value
+
+    Args:
+        results (list): Results from the experiments
+
+    Returns:
+        list: A flattened list of the results
+    """
     grouped = {}
     for r in results:
         key = (r["solver"], r["size"], r["puzzle"])
@@ -15,13 +23,12 @@ def _flatten_results(results: list) -> list:
         grouped[key].append(r)
     
     flattened = []
-    for (solver, size, puzzle), rs in grouped.items():
+    for (_, _, _), rs in grouped.items():
         base = deepcopy(rs[0])
         runtimes = [float(r["statistics"]["runtime"]) for r in rs]
         base["statistics"]["runtime"] = float(np.median(runtimes))
 
         encoding_keys = rs[0]["statistics"]["encoding_size"]
-        encoding_sizes = {}
         for key in encoding_keys.keys():
             values = [float(r["statistics"]["encoding_size"][key]) for r in rs]
             if values:
@@ -29,41 +36,79 @@ def _flatten_results(results: list) -> list:
         flattened.append(base)
     return flattened
 
-def _encoding_total(r: dict) -> int:
-    enc = r["statistics"]["encoding_size"]
+def _encoding_total(result: dict) -> int:
+    """ Counts the total encoding size
+
+    Args:
+        result (dict): Results for which we want to count the encoding size.
+
+    Returns:
+        int: The number for the encoding size
+    """
+    enc = result["statistics"]["encoding_size"]
     vars = sum(enc[k] for k in enc.keys() if k != "assertions")
     return int(vars+enc["assertions"])
 
 def _short_label(name: str, baseline: str) -> str:
+    """ Get the name of the solver without the baseline part
+
+    Args:
+        name (str): Full name of the solver
+        baseline (str): Baseline that is used for this solver
+
+    Returns:
+        str: Name of the solver without the baseline
+    """
     prefix = baseline+"+"
     return name[len(prefix):] if name.startswith(prefix) else name
 
 def _order_constraints(matrix: dict, relevance: dict, baseline: str) -> list:
-    def stats(c: str):
-        significant_sizes = relevance[c]["sizes"]
-        dirs = [matrix[c][n][1] for n in significant_sizes]
-        faster = sum(1 for d in dirs if d==1)
-        slower = sum(1 for d in dirs if d==-1)
+    """ Order the constraints in the significance grid by their significance, used for plotting
+
+    Args:
+        matrix (dict): Significance grid
+        relevance (dict): Statistics related to statistical relevance for each constraint
+        baseline (str): Baseline solver used
+
+    Returns:
+        list: An ordering of constraints based on the amount and direction of significant values
+    """
+    def stats(constraint: str):
+        significant_sizes = relevance[constraint]["sizes"]
+        directions = [matrix[constraint][n][1] for n in significant_sizes]
+        faster = sum(1 for dir in directions if dir==1)
+        slower = sum(1 for dir in directions if dir==-1)
         mixed = (faster > 0 and slower > 0)
-        relevant = relevance[c]["relevant"]
+        relevant = relevance[constraint]["relevant"]
 
         return relevant, faster, slower, mixed, len(significant_sizes)
-    def key(c: str):
-        relevant, faster, slower, mixed, k = stats(c)
+    def key(constraint: str):
+        relevant, faster, slower, mixed, k = stats(constraint)
+        # Lower rank number is higher sort order
         if faster > 0:
-            group = 0
+            rank = 0
         elif mixed:
-            group = 1
+            rank = 1
         elif relevant:
-            group = 2
+            rank = 2
         else:
-            group = 3
+            rank = 3
         
-        return (group, -k, -faster, -slower, _short_label(c, baseline))
-    
+        return (rank, -k, -faster, -slower, _short_label(constraint, baseline))
     return sorted(matrix.keys(), key=key)
 
 def _pair_by_size(results: list, size: int, this_name: str, that_name: str) -> tuple:
+    """ Gather all runtimes for the same puzzle ran by two solvers, within a single puzzle size
+
+    Args:
+        results (list): Results from the experiments
+        size (int): Puzzle size to pair
+        this_name (str): One of the solvers to pair
+        that_name (str): The other solver to pair
+
+    Returns:
+        tuple: Tuple containing two lists of runtimes from each of the solvers
+    """
     this = {}
     that = {}
 
@@ -76,6 +121,8 @@ def _pair_by_size(results: list, size: int, this_name: str, that_name: str) -> t
             this[puzzle] = r["statistics"]["runtime"]
         elif solver == that_name:
             that[puzzle] = r["statistics"]["runtime"]
+    
+    # Filter out puzzles that are not in both sets
     common = sorted(set(this.keys()) & set(that.keys()))
     if not common:
         return np.array([], dtype=float), np.array([], dtype=float)
@@ -85,29 +132,59 @@ def _pair_by_size(results: list, size: int, this_name: str, that_name: str) -> t
     return this_common, that_common
 
 def _pair_median_runtime_by_size(results: list, size: int, baseline: str, solver: str) -> tuple[float, float, int]:
-    s_base, s_var = _pair_by_size(results, size, baseline, solver)
-    if len(s_base) == 0:
+    """ Get the median runtimes from a paired group of solvers
+
+    Args:
+        results (list): Results from the experiments
+        size (int): Puzzle size to pair
+        baseline (str): Baseline solver to be paired with
+        solver (str): Other solver to pair with the baseline
+
+    Returns:
+        tuple[float, float, int]: _description_
+    """
+    base, other = _pair_by_size(results, size, baseline, solver)
+    # If the base list is empty, there were no equal puzzles between the sets
+    if len(base) == 0:
         return (float("nan"), float("nan"), 0)
-    return (float(np.median(s_base)), float(np.median(s_var)), int(len(s_base)))
+    return (float(np.median(base)), float(np.median(other)), int(len(base)))
 
 def _holm_correction(p_values: dict, alpha: float) -> dict:
+    """ Use holm correction to filter out significant values per size within a constraint
+
+    Args:
+        p_values (dict): Dict of p_values
+        alpha (float): Alpha to use as threshold
+
+    Returns:
+        dict: list of solvers that holds True if not significant
+    """
     keys = list(p_values.keys())
     ps = np.array([p_values[k] for k in keys], dtype=float)
 
     ps[np.isnan(ps)] = 1.0
     order = np.argsort(ps)
-    m = len(ps)
+    n = len(ps)
 
     rejected = {k: False for k in keys}
     for i, index in enumerate(order):
-        if ps[index] <= alpha/(m-i):
+        if ps[index] <= alpha/(n-i):
             rejected[keys[index]] = True
         else:
             break
     
     return rejected
 
-def _classify_constraints(matrix: dict, alpha: float):
+def _classify_constraints(matrix: dict, alpha: float) -> dict:
+    """ Calculate the relevance of a constraint based on the p-values
+
+    Args:
+        matrix (dict): Siginicance matrix
+        alpha (float): Alpha to used as a threshold for the Holm-correction
+
+    Returns:
+        dict: A Dict of the relevance data
+    """
     relevance = {}
 
     for c, sizes in matrix.items():
@@ -124,6 +201,16 @@ def _classify_constraints(matrix: dict, alpha: float):
     return relevance
 
 def _significance_grid(matrix: dict, relevance: dict, baseline: str) -> tuple:
+    """ Create a grid of only the significant values
+
+    Args:
+        matrix (dict): Significance matrix
+        relevance (dict): Statistics related to statistical relevance for each constraint
+        baseline (str): Baseline solver used
+
+    Returns:
+        tuple: A grid with only the significant values
+    """
     constraint_order = _order_constraints(matrix, relevance, baseline) 
     size_order = sorted({n for c in matrix for n in matrix[c].keys()})
     grid = np.zeros((len(constraint_order), len(size_order)), dtype=int)
@@ -138,14 +225,23 @@ def _significance_grid(matrix: dict, relevance: dict, baseline: str) -> tuple:
     return constraint_order, constraint_labels, size_order, grid
 
 def _wilcoxon_by_constraint(results: list, baseline: str, constraints: list|None, sizes: list|None) -> dict:
+    """ Calculate the Wilcoxon signed-rank test per constraint per puzzle size
+
+    Args:
+        results (list): Results from the experiments
+        baseline (str): Baseline used in the experiments
+        constraints (list | None): List of constraints added on top of the baseline
+        sizes (list | None): Puzzle sizes used in the experiments
+
+    Returns:
+        dict: A matrix of p-values per constraint per puzzle size
+    """
     if constraints is None:
         constraints = sorted({r["solver"] for r in results if r["solver"] != baseline})
     if sizes is None:
         sizes = sorted({r["size"] for r in results})
     
-    # Created a matrix for wicoxon signed-rank tests by constraints by sizes
     matrix = {c: {} for c in constraints}
-
     for c in constraints:
         for n in sizes:
             s1, s2 = _pair_by_size(results, n, baseline, c)
@@ -153,7 +249,7 @@ def _wilcoxon_by_constraint(results: list, baseline: str, constraints: list|None
                 matrix[c][n] = (np.nan, 0)
                 continue
 
-            difference  = s2 - s1
+            difference  = s2-s1
             median_difference = float(np.median(difference))
             direction = 0
             if median_difference < 0:
@@ -172,37 +268,47 @@ def _wilcoxon_by_constraint(results: list, baseline: str, constraints: list|None
     return matrix
 
 def _print_wolcoxon(relevance: dict) -> None:
+    """ Print a summary of the Wilcoxon test
+
+    Args:
+        relevance (dict): Statistics related to statistical relevance for each constraint
+    """
     relevant = [(c, r) for c, r in relevance.items() if r["relevant"]]
     not_relevant = [(c, r) for c, r in relevance.items() if not r["relevant"]]
 
     relevant.sort(key=lambda x: (-len(x[1]["sizes"]), x[0]))
     not_relevant.sort(key=lambda x: x[0])
 
-    print("\n=== RQ2 Wilcoxon screening (Holm-corrected across sizes) ===")
     print(f"Relevant constraints: {len(relevant)} / {len(relevance)}")
     print(f"Irrelevant constraints: {len(not_relevant)} / {len(relevance)}")
 
     max_list = 10**9
-
     if not_relevant:
-        print("\n-- Irrelevant (no significant size) --")
+        print("- Irrelevant (no significant size) -")
         for c, _ in not_relevant[:max_list]:
-            print(f"  {c}")
+            print(f" {c}")
         if len(not_relevant) > max_list:
-            print(f"  ... ({len(not_relevant) - max_list} more)")
+            print(f" ... ({len(not_relevant) - max_list} more)")
 
     if relevant:
-        print("\n-- Relevant (significant at ≥1 size) --")
+        print("- Relevant (significant at >0 size) -")
         for c, r in relevant[:max_list]:
             parts = []
             for n in r["sizes"]:
                 d = r["directions"].get(n, 0)
                 parts.append(f"{n}:{'faster' if d == 1 else 'slower' if d == -1 else 'n/a'}")
-            print(f"  {c}: {', '.join(parts)}")
+            print(f" {c}: {', '.join(parts)}")
         if len(relevant) > max_list:
-            print(f"  ... ({len(relevant) - max_list} more)")
+            print(f" ... ({len(relevant) - max_list} more)")
 
 def _plot_significance_heatmap(constraint_labels: list, size_order: list, significance_grid: np.ndarray) -> None:
+    """ Plot a heatmap to showcase significance puzzle sizes per constraint
+
+    Args:
+        constraint_labels (list): Labels to be used for the constraint names
+        size_order (list): Order of puzzle sizes to be used
+        significance_grid (np.ndarray): Significance grid of only values that are significant, else 0
+    """
     n_rows, n_cols = significance_grid.shape
     fig_h = max(2.6, 0.32*n_rows+1.2)
     fig_w = max(6.0, 0.38*n_cols+2.2)
@@ -230,14 +336,7 @@ def _plot_significance_heatmap(constraint_labels: list, size_order: list, signif
 
     full_slower_rows = [i for i in range(n_rows) if np.all(significance_grid[i, :] == -1)]
     for i in full_slower_rows:
-        # row i spans y in [i, i+1], and x in [0, n_cols]
-        rect = patches.Rectangle(
-            (0, i), n_cols, 1,
-            facecolor="white",
-            alpha=0.55,      # how much to fade
-            edgecolor="none",
-            zorder=3         # above cells, below edges/ticks (ticks are zorder higher anyway)
-        )
+        rect = patches.Rectangle((0, i), n_cols, 1, facecolor="white", alpha=0.55, edgecolor="none", zorder=3)
         ax.add_patch(rect)
 
     cbar = fig.colorbar(m, ax=ax, fraction=0.03, pad=0.02)
@@ -251,7 +350,18 @@ def _plot_significance_heatmap(constraint_labels: list, size_order: list, signif
     plt.close(fig)
     print(f"Saved {out_path}")
 
-def summarize_speedup_by_constraint(results: list, baseline: str, constraints: list | None = None, sizes: list | None = None) -> dict:
+def summarize_speedup_by_constraint(results: list, baseline: str, constraints: list|None = None, sizes: list|None = None) -> dict:
+    """ Summarize the total speedup gained per constraint against the baseline solver
+
+    Args:
+        results (list): Results from the experiments
+        baseline (str): Baseline solver used in the experiments
+        constraints (list | None, optional): List of constraints used in the experiments. Defaults to None.
+        sizes (list | None, optional): Puzzle sizes used in the experiments. Defaults to None.
+
+    Returns:
+        dict: A dictionary containing speedup statistics compared to the baseline for each constraint per puzzle size
+    """
     if constraints is None:
         constraints = sorted({r["solver"] for r in results if r["solver"] != baseline})
     if sizes is None:
@@ -261,66 +371,81 @@ def summarize_speedup_by_constraint(results: list, baseline: str, constraints: l
 
     for c in constraints:
         for n in sizes:
-            base_med, var_med, pairs = _pair_median_runtime_by_size(results, n, baseline, c)
-            if pairs == 0 or not np.isfinite(base_med) or not np.isfinite(var_med) or var_med <= 0:
+            base_med, constraint_med, num_pairs = _pair_median_runtime_by_size(results, n, baseline, c)
+            if num_pairs == 0 or constraint_med <= 0:
                 out[c][n] = {
-                    "pairs": pairs,
+                    "pairs": num_pairs,
                     "baseline_median": base_med,
-                    "solver_median": var_med,
+                    "solver_median": constraint_med,
                     "speedup": float("nan"),
                     "delta": float("nan"),
                 }
                 continue
 
             out[c][n] = {
-                "pairs": pairs,
+                "pairs": num_pairs,
                 "baseline_median": base_med,
-                "solver_median": var_med,
-                "speedup": float(base_med / var_med),
-                "delta": float(var_med - base_med),
+                "solver_median": constraint_med,
+                "speedup": float(base_med/constraint_med),
+                "delta": float(constraint_med-base_med),
             }
 
     return out
 
-def summarize_encoding_ratio_by_constraint(results: list, baseline: str, constraints: list | None = None, sizes: list | None = None) -> dict:
+def summarize_encoding_ratio_by_constraint(results: list, baseline: str, constraints: list|None = None, sizes: list|None = None) -> dict:
+    """ Summarize the encoding size ratios based on the baseline for each redundant constraint added
+
+    Args:
+        results (list): Results from the experiments
+        baseline (str): Baseline solver used in the experiments
+        constraints (list | None, optional): List of constraints used in the experiments. Defaults to None.
+        sizes (list | None, optional): Puzzle sizes used in the experiments. Defaults to None.
+
+    Returns:
+        dict: Dictionary containing the ratios of encoding sizes for all constraint compared to the baseline
+    """
     if constraints is None:
         constraints = sorted({r["solver"] for r in results if r["solver"] != baseline})
     if sizes is None:
         sizes = sorted({r["size"] for r in results})
 
-    # collect totals
-    totals = {}  # totals[solver][size] = [total,...]
-    for r in results:
-        s = r["solver"]
-        n = r["size"]
-        if s != baseline and s not in constraints:
+    totals = {}
+    for result in results:
+        solver = result["solver"]
+        n = result["size"]
+        if solver != baseline and solver not in constraints:
             continue
         if n not in sizes:
             continue
-        totals.setdefault(s, {}).setdefault(n, []).append(_encoding_total(r))
+        totals.setdefault(solver, {}).setdefault(n, []).append(_encoding_total(result))
 
-    out = {c: {} for c in constraints}
-
-    for c in constraints:
+    out = {constraint: {} for constraint in constraints}
+    for constraint in constraints:
         for n in sizes:
             base_list = totals.get(baseline, {}).get(n, [])
-            var_list = totals.get(c, {}).get(n, [])
-            if not base_list or not var_list:
-                out[c][n] = {"baseline_total": None, "solver_total": None, "ratio": float("nan")}
+            constraint_list = totals.get(constraint, {}).get(n, [])
+            if not base_list or not constraint_list:
+                out[constraint][n] = {"baseline_total": None, "solver_total": None, "ratio": float("nan")}
                 continue
 
             base_med = int(np.median(np.array(base_list, dtype=float)))
-            var_med = int(np.median(np.array(var_list, dtype=float)))
-            ratio = float(var_med / base_med) if base_med > 0 else float("nan")
+            constraint_med = int(np.median(np.array(constraint_list, dtype=float)))
+            ratio = float(constraint_med/base_med) if base_med > 0 else float("nan")
 
-            out[c][n] = {"baseline_total": base_med, "solver_total": var_med, "ratio": ratio}
-
+            out[constraint][n] = {"baseline_total": base_med, "solver_total": constraint_med, "ratio": ratio}
     return out
 
-def print_constraint_summary(speedup: dict, enc: dict, *, sizes: list[int] | None = None, baseline: str = "qf_ia") -> None:
-    # infer sizes
+def print_constraint_summary(speedups: dict, encoding_size_stats: dict, *, sizes: list|None = None, baseline: str = "qf_ia") -> None:
+    """ Print a summary for each constraint
+
+    Args:
+        speedup (dict): Speedup statistics compared to baseline
+        encoding_size_stats (dict): Satistics from encoding sizes compared to the baseline
+        sizes (list[int] | None, optional): Sizes to report on. Defaults to None.
+        baseline (str, optional): Baseline used in the experiments. Defaults to "qf_ia".
+    """
     if sizes is None:
-        sizes = sorted({n for c in speedup for n in speedup[c].keys()})
+        sizes = sorted({n for constraint in speedups for n in speedups[constraint].keys()})
 
     if not sizes:
         print("No sizes found.")
@@ -328,39 +453,48 @@ def print_constraint_summary(speedup: dict, enc: dict, *, sizes: list[int] | Non
 
     n_max = max(sizes)
 
-    print("\n=== RQ2 constraint summary (speedup + encoding ratio) ===")
     print(f"Baseline: {baseline}")
     print(f"Sizes: {sizes} (max n={n_max})")
 
-    for c in sorted(speedup.keys()):
-        vals = []
+    for constraint in sorted(speedups.keys()):
+        values = []
         for n in sizes:
-            v = speedup[c].get(n, {}).get("speedup", float("nan"))
-            if np.isfinite(v):
-                vals.append((n, v))
+            value = speedups[constraint].get(n, {}).get("speedup", float("nan"))
+            if np.isfinite(value):
+                values.append((n, value))
 
-        best = max(vals, key=lambda t: t[1]) if vals else (None, float("nan"))
-        worst = min(vals, key=lambda t: t[1]) if vals else (None, float("nan"))
+        best = max(values, key=lambda t: t[1]) if values else (None, float("nan"))
+        worst = min(values, key=lambda t: t[1]) if values else (None, float("nan"))
 
-        s_at_max = speedup[c].get(n_max, {}).get("speedup", float("nan"))
-        e_at_max = enc.get(c, {}).get(n_max, {}).get("ratio", float("nan"))
+        speedup_at_max = speedups[constraint].get(n_max, {}).get("speedup", float("nan"))
+        size_at_max = encoding_size_stats.get(constraint, {}).get(n_max, {}).get("ratio", float("nan"))
 
-        print(f"\n{c}:")
-        print(f"  best speedup:  n={best[0]}  {best[1]:.3g}x")
-        print(f"  worst speedup: n={worst[0]}  {worst[1]:.3g}x")
-        print(f"  speedup@{n_max}: {s_at_max:.3g}x")
-        print(f"  enc_ratio@{n_max}: {e_at_max:.3g}x")
+        print(f"{constraint}:")
+        print(f" best speedup: n={best[0]} | {best[1]:.3g}x")
+        print(f" worst speedup: n={worst[0]} | {worst[1]:.3g}x")
+        print(f" speedup at {n_max}: {speedup_at_max:.3g}x")
+        print(f" encoding_ratio at {n_max}: {size_at_max:.3g}x")
 
 def run_wilcoxon(results: list, baseline: str, constraints: list|None = None, sizes: list|None = None, alpha: float = 0.05, print_results: bool = True) -> None:
-    flattened_results = _flatten_results(results)
-    matrix = _wilcoxon_by_constraint(flattened_results, baseline, constraints, sizes)
-    relevance = _classify_constraints(matrix, alpha)
+    """ Run the RQ2 analysis
 
-    constraint_order, constraint_labels, size_order, significance_grid = _significance_grid(matrix, relevance, baseline)
+    Args:
+        results (list): Results from the experiments
+        baseline (str): Baseline solver used in the experiments
+        constraints (list | None, optional): Constraints used in the experiments. Defaults to None.
+        sizes (list | None, optional): Puzzle sizes to be analysed. Defaults to None.
+        alpha (float, optional): Alpha value to use for filtering significance. Defaults to 0.05.
+        print_results (bool, optional): Flag to indicate if we want to print the results to the CLI. Defaults to True.
+    """
+    flattened_results = _flatten_results(results)
+    p_matrix = _wilcoxon_by_constraint(flattened_results, baseline, constraints, sizes)
+    relevance_stats = _classify_constraints(p_matrix, alpha)
+
+    _, constraint_labels, size_order, significance_grid = _significance_grid(p_matrix, relevance_stats, baseline)
     if print_results:
-        _print_wolcoxon(relevance)
+        _print_wolcoxon(relevance_stats)
     _plot_significance_heatmap(constraint_labels, size_order, significance_grid)
     speedup = summarize_speedup_by_constraint(flattened_results, baseline, constraints, sizes)
-    enc = summarize_encoding_ratio_by_constraint(flattened_results, baseline, constraints, sizes)
+    encoding_size_stats = summarize_encoding_ratio_by_constraint(flattened_results, baseline, constraints, sizes)
 
-    print_constraint_summary(speedup, enc, sizes=size_order, baseline=baseline)
+    print_constraint_summary(speedup, encoding_size_stats, sizes=size_order, baseline=baseline)

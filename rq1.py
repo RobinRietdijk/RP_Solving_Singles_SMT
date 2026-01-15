@@ -1,7 +1,5 @@
 from collections import defaultdict
 import numpy as np
-from numpy.polynomial import Polynomial
-import scipy
 import os
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
@@ -9,6 +7,7 @@ import scienceplots
 
 plt.style.use(['science','ieee'])
 
+# Custom settings for plots
 plt.rcParams.update({
     "lines.linewidth": 0.8,
     "lines.markersize": 1,
@@ -39,6 +38,7 @@ plt.rcParams.update({
     "grid.linestyle": "-", 
 })
 
+# List of colors to be used in plots
 colors = [
     "#D62728", 
     "#006BA4", 
@@ -54,7 +54,16 @@ colors = [
 
 LINE_STYLES = ["-", "--", "-.", ":"]
 
-def _summarize_runtime_scaling(results) -> list:
+def _summarize_runtime_scaling(results: list) -> list:
+    """ Create a summary of the runtime statistics
+
+    Args:
+        results (list): Results to be analysed
+
+    Returns:
+        list: Summary of runtime statistics
+    """
+    # Sort by puzzle
     by_puzzle = {}
     for r in results:
         key = (r["solver"], r["size"], r["puzzle"])
@@ -62,10 +71,12 @@ def _summarize_runtime_scaling(results) -> list:
             by_puzzle[key] = []
         by_puzzle[key].append(r["statistics"]["runtime"])
 
+    # Flatten the puzzles with multiple runs
     per_puzzle = []
     for (solver, size, _), times in by_puzzle.items():
         per_puzzle.append((solver, size, np.median(times)))
 
+    # Sort by puzzle size
     by_size = {}
     for (solver, size, runtime) in per_puzzle:
         key = (solver, size)
@@ -89,7 +100,16 @@ def _summarize_runtime_scaling(results) -> list:
     
     return sorted(summary, key=lambda x: (x["size"], x["solver"]))
 
-def _summarize_encoding_scaling(results):
+def _summarize_encoding_scaling(results: list) -> list:
+    """ Create a summary of the encoding size statistics
+
+    Args:
+        results (list): Results to be analysed
+
+    Returns:
+        list: A summary of the encoding size statistics
+    """
+    # Sort by puzzle
     by_puzzle = {}
     for r in results:
         key = (r["solver"], r["size"], r["puzzle"])
@@ -101,10 +121,12 @@ def _summarize_encoding_scaling(results):
         by_puzzle[key]["variables"].append(total_variables)
         by_puzzle[key]["assertions"].append(encoding_size["assertions"])
 
+    # Flatten multiple runs into single values
     per_puzzle = []
     for (solver, size, _), values in by_puzzle.items():
         per_puzzle.append((solver, size, float(np.median(values["variables"])), float(np.median(values["assertions"]))))
 
+    # Sort by size
     by_size = {}
     for (solver, size, variables, assertions) in per_puzzle:
         key = (r["solver"], r["size"])
@@ -125,11 +147,18 @@ def _summarize_encoding_scaling(results):
     return sorted(summary, key=lambda x: (x["size"], x["solver"]))
 
 def plot_runtime_vs_size(results: list, solver_order: list) -> None:
+    """ Plot the median runtime per puzzle size
+
+    Args:
+        results (list): Results with runtime satistics
+        solver_order (list): Order of the solvers to be plotted to make sure the legend stays the same across experiments
+    """
     summary = _summarize_runtime_scaling(results)
 
     fig, ax = plt.subplots()
     ax.set_prop_cycle(color=colors)
 
+    # To make sure the legend and colors stay the same between experiments, we use a solver order argument
     for i, solver in enumerate(solver_order):
         z = 10+(len(solver_order)-i)
         x = []
@@ -161,11 +190,18 @@ def plot_runtime_vs_size(results: list, solver_order: list) -> None:
     print(f"Saved {out_path}")
 
 def plot_encoding_scaling(results: list, solver_order: list) -> None:
+    """ Plot the median runtime per puzzle size
+
+    Args:
+        results (list): Results with encoding size satistics
+        solver_order (list): Order of the solvers to be plotted to make sure the legend stays the same across experiments
+    """
     summary = _summarize_encoding_scaling(results)
 
     fig, ax = plt.subplots()
     ax.set_prop_cycle(color=colors)
 
+    # To make sure the legend and colors stay the same between experiments, we use a solver order argument
     for i, solver in enumerate(solver_order):
         z = 10 + (len(solver_order)-i)
         x = []
@@ -196,18 +232,20 @@ def plot_encoding_scaling(results: list, solver_order: list) -> None:
     plt.close()
     print(f"Saved {out_path}")
 
-def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_sizes: list|None = None, slope_min_points: int = 3) -> None:
-    """
-    Prints several stats used to answer RQ1
-    
+def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_sizes: list|None = None) -> None:
+    """ Prints the statistics used in RQ1
+
     Args:
-        results: list of result dicts
-        baseline_solver: solver used as baseline for speedups
-        report_sizes: which sizes to print. If None, prints min/mid/max sizes in data.
-        slope_min_points: minimum points needed to fit a slope.
+        results (list): Results from the experiments
+        baseline_solver (str, optional): Name of the solver to be used as baseline. Defaults to "qf_ia".
+        report_sizes (list | None, optional): Sizes to report in the summary. Defaults to None.
+
+    Raises:
+        ValueError: If the baseline solver is not in the data
     """
     summary = _summarize_runtime_scaling(results)
 
+    # Sort by solver
     by_solver_size = defaultdict(dict)
     solvers = sorted(set(r["solver"] for r in summary))
     sizes = sorted(set(r["size"] for r in summary))
@@ -225,11 +263,10 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
             mid = baseline_sizes[len(baseline_sizes) // 2]
             report_sizes = sorted(set([baseline_sizes[0], mid, baseline_sizes[-1]]))
 
-    print("\n=== RQ1 descriptive statistics (runtime) ===")
     print(f"Baseline solver for speedups: {baseline_solver}")
     print(f"Reported sizes: {report_sizes}")
 
-    print("\n-- Median runtime & speedup vs baseline (median_baseline / median_solver) --")
+    print("- Median runtime & speedup/slowdown vs baseline (median_baseline / median_solver) -")
     for n in report_sizes:
         if n not in by_solver_size[baseline_solver]:
             continue
@@ -240,11 +277,11 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
             if n not in by_solver_size[s]:
                 continue
             med = by_solver_size[s][n]["median"]
-            speedup = (base_med / med) if med > 0 else float("inf")
-            slowdown = (med / base_med) if med > 0 else float("inf")
-            print(f"  {s:>12}: median={med:.6g}s | speedup={speedup:.3g}x | slowdown={slowdown:.3g}x")
+            speedup = (base_med/med) if med > 0 else float("inf")
+            slowdown = (med/base_med) if med > 0 else float("inf")
+            print(f" {s:>12}: median={med:.6g}s | speedup={speedup:.3g}x | slowdown={slowdown:.3g}x")
 
-    print("\n-- Relative variability per size: (q3 - q1) --")
+    print("- Relative variability per size: (q3 - q1) -")
     for n in report_sizes:
         print(f"\nSize n={n}:")
         for s in solvers:
@@ -252,10 +289,10 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
                 continue
             row = by_solver_size[s][n]
             med, q1, q3 = row["median"], row["q1"], row["q3"]
-            rel_iqr = ((q3 - q1) / med) if med > 0 else float("nan")
-            print(f"  {s:>12}: rel_IQR={rel_iqr:.3g}  (q1={q1:.6g}, q3={q3:.6g})")
+            rel_iqr = ((q3-q1)/med) if med > 0 else float("nan")
+            print(f" {s:>12}: rel_IQR={rel_iqr:.3g} (q1={q1:.6g}, q3={q3:.6g})")
     
-    print("\n-- Average relative variability: (q3 - q1) --")
+    print("- Average relative variability: (q3 - q1) -")
     avgs = {}
     counts = {}
     for n in sizes:
@@ -270,7 +307,7 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
 
             row = by_solver_size[s][n]
             med, q1, q3 = row["median"], row["q1"], row["q3"]
-            rel_iqr = (q3 - q1) / med if med > 0 else float("nan")
+            rel_iqr = (q3-q1)/med if med > 0 else float("nan")
             avgs[s] += rel_iqr
             counts[s] += 1
 
@@ -279,7 +316,7 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
             avgs[s] /= counts[s]
         print(f"{s:>12}: avg_rel_IQR={avgs[s]:.3g} (n={counts[s]})")
 
-    print("\n-- Scaling slope: fit log(median_runtime) = a*n + b --")
+    print("- Fit log(median_runtime) = a*n + b -")
     for s in solvers:
         xs, ys = [], []
         for n in sizes:
@@ -292,19 +329,24 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
             xs.append(n)
             ys.append(np.log(med))
 
-        if len(xs) < slope_min_points:
-            print(f"  {s:>12}: not enough points to fit (have {len(xs)})")
+        if len(xs) < 3:
+            print(f" {s:>12}: not enough points to fit (have {len(xs)})")
             continue
 
         a, b = np.polyfit(np.array(xs, dtype=float), np.array(ys, dtype=float), 1)
-        yhat = a * np.array(xs, dtype=float) + b
-        ss_res = float(np.sum((np.array(ys) - yhat) ** 2))
-        ss_tot = float(np.sum((np.array(ys) - np.mean(ys)) ** 2))
-        r2 = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else float("nan")
+        yhat = a*np.array(xs, dtype=float)+b
+        ss_res = float(np.sum((np.array(ys)-yhat)**2))
+        ss_tot = float(np.sum((np.array(ys)-np.mean(ys))**2))
+        r2 = 1.0-(ss_res/ss_tot) if ss_tot > 0 else float("nan")
+        print(f" {s:>12}: a={a:.4g} | b={b:.4g} | R^2={r2:.3g}")
 
-        print(f"  {s:>12}: a={a:.4g}  b={b:.4g}  R^2={r2:.3g}")
+def print_encoding_text_stats(results: list, report_sizes: list|None = None) -> None:
+    """ Prints the encoding statistics used in RQ1
 
-def print_encoding_text_stats(results: list, report_sizes: list[int] | None = None) -> None:
+    Args:
+        results (list): Results from the experiments
+        report_sizes (list | None, optional): which sizes to print. If None, prints min/mid/max sizes in data.
+    """
     enc_summary = _summarize_encoding_scaling(results)
     by_solver_size = defaultdict(dict)
     solvers = sorted(set(r["solver"] for r in enc_summary))
@@ -313,10 +355,9 @@ def print_encoding_text_stats(results: list, report_sizes: list[int] | None = No
         by_solver_size[r["solver"]][r["size"]] = r
 
     if report_sizes is None and sizes:
-        mid = sizes[len(sizes) // 2]
+        mid = sizes[len(sizes)//2]
         report_sizes = sorted(set([sizes[0], mid, sizes[-1]]))
 
-    print("\n=== RQ1 descriptive statistics (encoding size) ===")
     print(f"Reported sizes: {report_sizes}")
 
     for n in report_sizes or []:
@@ -326,4 +367,4 @@ def print_encoding_text_stats(results: list, report_sizes: list[int] | None = No
             if not row:
                 continue
             total = row["variables"] + row["assertions"]
-            print(f"  {s:>12}: total={total}  vars={row['variables']}  assertions={row['assertions']}")
+            print(f" {s:>12}: total={total} | vars={row['variables']} | assertions={row['assertions']}")
