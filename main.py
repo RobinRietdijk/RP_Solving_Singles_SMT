@@ -33,8 +33,8 @@ SOLVERS = {
     "qf_ia_alt_c": z3solver.qf_ia_alt_c,
     "qf_ia_tree_c": z3solver.qf_ia_tree_c,
     "qf_bv": z3solver.qf_bv,
-    "boolean": z3solver.boolean,
-    "lazy": z3solver.lazy,
+    "qf_bool": z3solver.boolean,
+    "qf_ia-c": z3solver.lazy,
 }
 
 # Available constraints that can be added using the CLI
@@ -304,7 +304,7 @@ def _parse_solver_specs(solver: str) -> dict:
     Returns:
         dict: _description_
     """
-    parts = [i for i in s.split("+") if i]
+    parts = [i for i in solver.split("+") if i]
     if not parts:
         raise argparse.ArgumentTypeError("Empty solver specification")
     
@@ -318,7 +318,7 @@ def _parse_solver_specs(solver: str) -> dict:
     if unknown:
         raise argparse.ArgumentTypeError(f"Unknown constraints: {', '.join(unknown)}")
     
-    return {"base": SOLVERS[base], "constraints": [CONSTRAINTS[i] for i in constraints], "name": s}
+    return {"base": SOLVERS[base], "constraints": [CONSTRAINTS[i] for i in constraints], "name": solver}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Hitori SMT solver and checker")
@@ -332,7 +332,6 @@ if __name__ == "__main__":
     solve_parser.add_argument("-r", "--recursive", action="store_true", help="Recursively read subfolders")
     solve_parser.add_argument("-s", "--strict", action="store_true", help="Exit when wrong file type is found")
     solve_parser.add_argument("-w", "--write", action="store_true", help="Write to file")
-    solve_parser.add_argument("-p", "--plot", action="append", type=int, choices=plots.PLOT_TYPES.keys(), help="Generate a specific plot type")
     solve_parser.add_argument("solvers", nargs="+", type=_parse_solver_specs, help="One or more solver variants to run")
     solve_parser.set_defaults(func=_solve_command)
 

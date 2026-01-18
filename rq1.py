@@ -38,21 +38,28 @@ plt.rcParams.update({
     "grid.linestyle": "-", 
 })
 
-# List of colors to be used in plots
-colors = [
-    "#D62728", 
-    "#006BA4", 
-    "#8C564B", 
-    "#2CA02C", 
-    "#7B4EA3",
-    "#FF800E", 
-    "#E43D96",
-    "#17BECF", 
-    "#BCBD22",  
-    "#7F7F7F"
-]
+colors = ["#D62728", "#006BA4", "#8C564B", "#2CA02C", "#7B4EA3", "#FF800E", "#E43D96"]
 
-LINE_STYLES = ["-", "--", "-.", ":"]
+# Set the colors for solvers to be used in plots
+SOLVER_COLORS = {
+    "qf_ia": "#D62728", 
+    "qf_ia-c": "#006BA4", 
+    "qf_bv": "#8C564B", 
+    "qf_bool": "#2CA02C", 
+    "qf_ia_alt_c": "#7B4EA3",
+    "qf_ia_alt_u": "#FF800E", 
+    "qf_ia_tree_c": "#E43D96"
+}
+
+SOLVER_LINE_STYLES = {
+    "qf_ia": "-", 
+    "qf_ia-c": "--", 
+    "qf_bv": "-.", 
+    "qf_bool": ":", 
+    "qf_ia_alt_c": "-",
+    "qf_ia_alt_u": "--", 
+    "qf_ia_tree_c": "-."
+}
 
 def _summarize_runtime_scaling(results: list) -> list:
     """ Create a summary of the runtime statistics
@@ -129,7 +136,7 @@ def _summarize_encoding_scaling(results: list) -> list:
     # Sort by size
     by_size = {}
     for (solver, size, variables, assertions) in per_puzzle:
-        key = (r["solver"], r["size"])
+        key = (solver, size)
         if key not in by_size:
             by_size[key] = {"variables": [], "assertions": []}
         by_size[key]["variables"].append(variables)
@@ -167,7 +174,7 @@ def plot_runtime_vs_size(results: list, solver_order: list) -> None:
             if r["solver"] == solver:
                 x.append(r["size"])
                 y.append(r["median"])
-        ax.plot(x, y, marker=".", linestyle=LINE_STYLES[i % len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
+        ax.plot(x, y, marker=".", linestyle=SOLVER_LINE_STYLES[solver], color=SOLVER_COLORS[solver], alpha=0.85, label=solver, zorder=z)
     
     ax.set_yscale("log")
     ax.set_xlabel("Puzzle size (n)")
@@ -197,7 +204,7 @@ def plot_encoding_scaling(results: list, solver_order: list) -> None:
         solver_order (list): Order of the solvers to be plotted to make sure the legend stays the same across experiments
     """
     summary = _summarize_encoding_scaling(results)
-
+    print(summary)
     fig, ax = plt.subplots()
     ax.set_prop_cycle(color=colors)
 
@@ -210,7 +217,7 @@ def plot_encoding_scaling(results: list, solver_order: list) -> None:
             if r["solver"] == solver:
                 x.append(r["size"])
                 y.append(r["assertions"]+r["variables"])
-        ax.plot(x, y, marker=".", linestyle=LINE_STYLES[i % len(LINE_STYLES)], alpha=0.85, label=solver, zorder=z)
+        ax.plot(x, y, marker=".", linestyle=SOLVER_LINE_STYLES[solver], color=SOLVER_COLORS[solver], alpha=0.85, label=solver, zorder=z)
     
     ax.set_yscale("log")
     ax.set_xlabel("Puzzle size (n)")
@@ -353,12 +360,9 @@ def print_encoding_text_stats(results: list, report_sizes: list|None = None) -> 
     sizes = sorted(set(r["size"] for r in enc_summary))
     for r in enc_summary:
         by_solver_size[r["solver"]][r["size"]] = r
-
     if report_sizes is None and sizes:
         mid = sizes[len(sizes)//2]
         report_sizes = sorted(set([sizes[0], mid, sizes[-1]]))
-
-    print(f"Reported sizes: {report_sizes}")
 
     for n in report_sizes or []:
         print(f"\nSize n={n}:")
