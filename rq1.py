@@ -43,7 +43,7 @@ colors = ["#D62728", "#006BA4", "#8C564B", "#2CA02C", "#7B4EA3", "#FF800E", "#E4
 # Set the colors for solvers to be used in plots
 SOLVER_COLORS = {
     "qf_ia": "#D62728", 
-    "qf_ia-c": "#006BA4", 
+    "qf_ia_external": "#006BA4", 
     "qf_bv": "#8C564B", 
     "qf_bool": "#2CA02C", 
     "qf_ia_alt_c": "#7B4EA3",
@@ -53,7 +53,7 @@ SOLVER_COLORS = {
 
 SOLVER_LINE_STYLES = {
     "qf_ia": "-", 
-    "qf_ia-c": "--", 
+    "qf_ia_external": "--", 
     "qf_bv": "-.", 
     "qf_bool": ":", 
     "qf_ia_alt_c": "-",

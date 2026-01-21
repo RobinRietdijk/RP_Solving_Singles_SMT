@@ -35,7 +35,8 @@ SOLVERS = {
     "qf_bv": z3solver.qf_bv,
     "qf_bool": z3solver.boolean,
     "qf_ia-c": z3solver.lazy,
-    "lazy": z3solver.lazy
+    "lazy": z3solver.lazy,
+    "qf_ia_external": z3solver.lazy
 }
 
 # Available constraints that can be added using the CLI
