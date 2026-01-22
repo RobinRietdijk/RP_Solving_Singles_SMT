@@ -76,10 +76,10 @@ def _plot(results: dict, solver_order: list) -> None:
 
         by_size = {}
         for r in results[solver]:
-            key = r["n"]
+            key = r["grid size"]
             if key not in by_size:
                 by_size[key] = []
-            by_size[key].append(r["time_in_seconds"])
+            by_size[key].append(r["time in s"])
 
         xs = sorted(by_size.keys())
         ys = [float(np.median(by_size[n])) for n in xs]
@@ -105,7 +105,7 @@ def _plot(results: dict, solver_order: list) -> None:
     print(f"Saved {out_path}")
 
 def main():
-    results = _read_files("csvs/benchmark")
+    results = _read_files("csvs/benchmark/internal")
     _plot(results, ["asp", "z3", "prolog", "pumpkin", "gurobi"])
 
 if __name__ == "__main__":
