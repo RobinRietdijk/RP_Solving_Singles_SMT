@@ -1,6 +1,6 @@
 import sys
 import time
-import z3solver_base
+import solver.z3solver_base as z3solver_base
 from z3 import * # type: ignore
 
 # Standard timeout of 10s used in every solver

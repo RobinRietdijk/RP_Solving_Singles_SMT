@@ -11,7 +11,7 @@ import experiments.rq3 as rq3
 import utils.plots as plots
 from datetime import datetime
 from utils.file_utils import read_puzzle, read_puzzle_dir, read_solution, read_solution_dir, write_file, append_comment, write_csv,read_csv, read_csv_folder
-from utils import format_elapsed
+from utils.utils import format_elapsed
 from solution_checker.checker import check_puzzle
 
 # Default path to the puzzle folder
