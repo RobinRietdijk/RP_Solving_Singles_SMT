@@ -1,8 +1,8 @@
-from collections import defaultdict
 import numpy as np
 import os
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+from scipy.stats import spearmanr
 import scienceplots
 
 plt.style.use(['science','ieee'])
@@ -253,10 +253,12 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
     summary = _summarize_runtime_scaling(results)
 
     # Sort by solver
-    by_solver_size = defaultdict(dict)
+    by_solver_size = {}
     solvers = sorted(set(r["solver"] for r in summary))
     sizes = sorted(set(r["size"] for r in summary))
     for r in summary:
+        if r["solver"] not in by_solver_size:
+            by_solver_size[r["solver"]] = {}
         by_solver_size[r["solver"]][r["size"]] = r
 
     if baseline_solver not in by_solver_size:
@@ -355,10 +357,13 @@ def print_encoding_text_stats(results: list, report_sizes: list|None = None) -> 
         report_sizes (list | None, optional): which sizes to print. If None, prints min/mid/max sizes in data.
     """
     enc_summary = _summarize_encoding_scaling(results)
-    by_solver_size = defaultdict(dict)
+    run_summary = _summarize_runtime_scaling(results)
+    by_solver_size = {}
     solvers = sorted(set(r["solver"] for r in enc_summary))
     sizes = sorted(set(r["size"] for r in enc_summary))
     for r in enc_summary:
+        if r["solver"] not in by_solver_size:
+            by_solver_size[r["solver"]] = {}
         by_solver_size[r["solver"]][r["size"]] = r
     if report_sizes is None and sizes:
         mid = sizes[len(sizes)//2]
@@ -372,3 +377,34 @@ def print_encoding_text_stats(results: list, report_sizes: list|None = None) -> 
                 continue
             total = row["variables"] + row["assertions"]
             print(f" {s:>12}: total={total} | vars={row['variables']} | assertions={row['assertions']}")
+    
+    by_puzzle = {}
+    for r in results:
+        key = (r["solver"], r["size"], r["puzzle"])
+        if key not in by_puzzle:
+            by_puzzle[key] = {"runtimes": [], "enc_sizes": []}
+        by_puzzle[key]["runtimes"].append(r["statistics"]["runtime"])
+
+        enc_stats = r["statistics"]["encoding_size"]
+        total_variables = sum(y for x, y in enc_stats.items() if x != "assertions")
+        total_enc_size = float(total_variables+enc_stats["assertions"])
+        by_puzzle[key]["enc_sizes"].append(total_enc_size)
+
+    xs = {}
+    ys = {}
+    for (solver, _, _), values in by_puzzle.items():
+        runtimes = float(np.median(values["runtimes"]))
+        enc_sizes = float(np.median(values["enc_sizes"]))
+        if runtimes > 0 and enc_sizes > 0:
+            if solver not in xs:
+                xs[solver] = []
+            if solver not in ys:
+                ys[solver] = []
+            xs[solver].append(runtimes)
+            ys[solver].append(enc_sizes)
+    
+    for solver in sorted(xs.keys()):
+        x = np.array(xs[solver], dtype=float)
+        y = np.array(ys[solver], dtype=float)
+        rho, p = spearmanr(x, y)
+        print(f"{solver:>12}: rho={rho:.3g}, p={p:.3g} (n={len(x)})")
