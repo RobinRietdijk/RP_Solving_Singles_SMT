@@ -106,7 +106,7 @@ def _plot(results: dict, solver_order: list) -> None:
 
 def main():
     results = _read_files("csvs/benchmark/internal")
-    _plot(results, ["asp", "z3", "prolog", "pumpkin", "gurobi"])
+    _plot(results, ["prolog", "gurobi", "z3", "pumpkin", "asp"])
 
 if __name__ == "__main__":
     main()
