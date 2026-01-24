@@ -3,6 +3,10 @@ from clingo import Model
 
 from typing import List
 
+'''
+This solver is a version of the ASP solver developed by Sappho de Nooij (https://github.com/sappho3)
+'''
+
 def solve(grid: List[List[int]]) -> tuple[bool, bool]:
     n = len(grid)
 

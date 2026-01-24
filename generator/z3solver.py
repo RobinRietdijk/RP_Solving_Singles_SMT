@@ -1,6 +1,10 @@
 import sys
 from z3 import *
 
+'''
+This solver is an early version of the Z3 solver developed by Robin Rietdijk (https://github.com/RobinRietdijk)
+'''
+
 # Distinct tactic following Z3py basics, SMT/SAT describes a one-hot approach for latin squares
 def add_constraint_uniquecells(s: Solver, colored: list, grid: list, n: int) -> None:
     for i in range(n):
