@@ -21,7 +21,7 @@ SOLUTIONS_FOLDER = os.path.abspath("solutions")
 # Default path to the csv folder
 CSV_FOLDER = os.path.abspath("csvs")
 # Options for the analysis command
-ANALYSIS_OPTIONS = ["write_csv", "rq1", "rq2", "rq3"]
+ANALYSIS_OPTIONS = ["write_csv", "rq1", "rq2", "rq3", "qq"]
 # Multiplier for solver that triggered a timeout
 PAR_MULTIPLIER = 2
 
@@ -288,8 +288,10 @@ def _analyze_command(args: dict) -> None:
         rq2.run_wilcoxon(results, "lazy")
     if args.analysis == "rq3":
         rq3.run_all(results, k_out=1.5, k_fout=3.0)
-    if args.analysis =="write_csv":
+    if args.analysis == "write_csv":
         write_csv(results, CSV_FOLDER)
+    if args.analysis == "qq":
+        plots.plot_qq_runtime(results, "qf_ia", 25)
 
 
 def _parse_solver_specs(solver: str) -> dict:

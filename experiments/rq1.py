@@ -274,7 +274,6 @@ def print_rq1_text_stats(results: list, baseline_solver: str = "qf_ia", report_s
 
     print(f"Baseline solver for speedups: {baseline_solver}")
     print(f"Reported sizes: {report_sizes}")
-
     print("- Median runtime & speedup/slowdown vs baseline (median_baseline / median_solver) -")
     for n in report_sizes:
         if n not in by_solver_size[baseline_solver]:
@@ -357,7 +356,6 @@ def print_encoding_text_stats(results: list, report_sizes: list|None = None) -> 
         report_sizes (list | None, optional): which sizes to print. If None, prints min/mid/max sizes in data.
     """
     enc_summary = _summarize_encoding_scaling(results)
-    run_summary = _summarize_runtime_scaling(results)
     by_solver_size = {}
     solvers = sorted(set(r["solver"] for r in enc_summary))
     sizes = sorted(set(r["size"] for r in enc_summary))
@@ -378,6 +376,7 @@ def print_encoding_text_stats(results: list, report_sizes: list|None = None) -> 
             total = row["variables"] + row["assertions"]
             print(f" {s:>12}: total={total} | vars={row['variables']} | assertions={row['assertions']}")
     
+    # Collect the encoding size and runtime per puzzle
     by_puzzle = {}
     for r in results:
         key = (r["solver"], r["size"], r["puzzle"])
@@ -390,19 +389,20 @@ def print_encoding_text_stats(results: list, report_sizes: list|None = None) -> 
         total_enc_size = float(total_variables+enc_stats["assertions"])
         by_puzzle[key]["enc_sizes"].append(total_enc_size)
 
+    # Flatten the runtimes and encoding sizes in case of multiple runs
     xs = {}
     ys = {}
     for (solver, _, _), values in by_puzzle.items():
         runtimes = float(np.median(values["runtimes"]))
         enc_sizes = float(np.median(values["enc_sizes"]))
-        if runtimes > 0 and enc_sizes > 0:
-            if solver not in xs:
-                xs[solver] = []
-            if solver not in ys:
-                ys[solver] = []
-            xs[solver].append(runtimes)
-            ys[solver].append(enc_sizes)
+        if solver not in xs:
+            xs[solver] = []
+        if solver not in ys:
+            ys[solver] = []
+        xs[solver].append(runtimes)
+        ys[solver].append(enc_sizes)
     
+    # Calculate the spearman correlation coefficient between runtime and encoding size
     for solver in sorted(xs.keys()):
         x = np.array(xs[solver], dtype=float)
         y = np.array(ys[solver], dtype=float)

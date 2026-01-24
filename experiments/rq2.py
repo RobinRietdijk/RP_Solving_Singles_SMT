@@ -500,7 +500,20 @@ def print_constraint_summary(speedups: dict, encoding_size_stats: dict, *, sizes
         print(f" speedup at {n_max}: {speedup_at_max:.3g}x")
         print(f" encoding_ratio at {n_max}: {size_at_max:.3g}x")
 
-def _speedup_grid(constraint_order, size_order, matrix: dict, relevance: dict, baseline: str):
+def _speedup_grid(constraint_order: list, size_order: list, matrix: dict, relevance: dict, baseline: str):
+    """ Create a grid with all speedup amounts for all constraints and sizes that are significant
+        Non-significant values are set to NaN
+
+    Args:
+        constraint_order (list): All constraints to be checked
+        size_order (list): All sizes to be checked
+        matrix (dict): Significance matrix
+        relevance (dict): Relevance data for each constraint and size
+        baseline (str): Baseline used to compare to in the experiment
+
+    Returns:
+        _type_: _description_
+    """
     grid = np.full((len(constraint_order), len(size_order)), np.nan, dtype=float)
 
     for i, c in enumerate(constraint_order):
@@ -518,6 +531,13 @@ def _speedup_grid(constraint_order, size_order, matrix: dict, relevance: dict, b
     return constraint_labels, size_order, grid
 
 def _plot_speedup_heatmap(constraint_labels: list, size_order: list, speedup_grid: np.ndarray) -> None:
+    """ Plot a heatmap of the speedup values for all significant constraints and sizes
+
+    Args:
+        constraint_labels (list): Labels to be used to represent the constraints
+        size_order (list): Order of the sizes in the heatmap
+        speedup_grid (np.ndarray): Grid with all speedup values for significant constraints and sizes
+    """
     n_rows, n_cols = speedup_grid.shape
     fig_h = max(2.6, 0.32*n_rows+1.2)
     fig_w = max(6.0, 0.38*n_cols+2.2)
@@ -604,6 +624,14 @@ def _summarize_runtime(results: list) -> list:
     return sorted(summary, key=lambda x: (x["size"], x["solver"]))
 
 def _plot_runtime_per_size(results: list, baseline: str, constraints: list, sizes: list) -> None:
+    """ Create a plot of a selection of constraints for a selection of sizes
+
+    Args:
+        results (list): Results from the experiment
+        baseline (str): Baseline that was used to compare to
+        constraints (list): Constraints to be plotted
+        sizes (list): Puzzle sizes to be plotted
+    """
     summary = _summarize_runtime(results)
 
     fig, ax = plt.subplots()
@@ -661,7 +689,7 @@ def run_wilcoxon(results: list, baseline: str, constraints: list|None = None, si
     _plot_significance_heatmap(constraint_labels, size_order, significance_grid)
     speedup = _summarize_speedup_by_constraint(flattened_results, baseline, constraints, sizes)
     encoding_size_stats = _summarize_encoding_ratio_by_constraint(flattened_results, baseline, constraints, sizes)
-    # constraint_labels2, size_order2, speedup_grid = _speedup_grid(constraint_order, size_order, speedup, relevance_stats, baseline)
-    # _plot_speedup_heatmap(constraint_labels2, size_order2, speedup_grid)
-    # _plot_runtime_per_size(results, baseline, constraints, sizes)
+    constraint_labels2, size_order2, speedup_grid = _speedup_grid(constraint_order, size_order, speedup, relevance_stats, baseline)
+    _plot_speedup_heatmap(constraint_labels2, size_order2, speedup_grid)
+    _plot_runtime_per_size(results, baseline, constraints, sizes)
     print_constraint_summary(speedup, encoding_size_stats, sizes=size_order, baseline=baseline)
